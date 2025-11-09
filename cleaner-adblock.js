@@ -134,6 +134,12 @@ Dead domains (remove from list):
   - DNS resolution failures
   - Connection timeouts
   - Network errors
+  - HTTP 403 (only if all variants return 403)
+
+Special handling:
+  - HTTP 403 Forbidden: If non-www returns 403 but www. works, domain is kept
+  - This handles sites like 101soundboards.com where bare domain is blocked
+    but www.101soundboards.com works fine
 
 Redirect domains (review):
   - Domains that redirect to different domains
@@ -503,10 +509,24 @@ async function checkDomain(browser, domainObj, index, total) {
       }
       
       // Check if dead
-      const isDead = statusCode >= 400 || statusCode === null;
+      // 403 is special - it means server is up but denying access
+      // Don't treat 403 as dead if we have www variant to try
+      const is403 = statusCode === 403;
+      const isTrulyDead = (statusCode >= 400 && statusCode !== 403) || statusCode === null;
       
-      // If dead and not last variant, try next variant
-      if (isDead && !isLastVariant) {
+      // If 403 and not last variant, try next variant (www might work)
+      if (is403 && !isLastVariant) {
+        clearTimeout(forceCloseTimer);
+        if (!pageClosed) {
+          pageClosed = true;
+          await page.close();
+        }
+        console.log(`  ⚠  ${variant} - HTTP 403 Forbidden, trying next...`);
+        continue; // Try next variant
+      }
+      
+      // If truly dead and not last variant, try next variant
+      if (isTrulyDead && !isLastVariant) {
         clearTimeout(forceCloseTimer);
         if (!pageClosed) {
           pageClosed = true;
@@ -515,6 +535,8 @@ async function checkDomain(browser, domainObj, index, total) {
         console.log(`  ??  ${variant} - Dead (HTTP ${statusCode || 'timeout'}), trying next...`);
         continue; // Try next variant
       }
+      
+      const isDead = isTrulyDead || (is403 && isLastVariant);
       
       // Check if redirects to different domain
       const extractDomain = (urlStr) => {
