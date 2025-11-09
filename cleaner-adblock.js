@@ -533,13 +533,34 @@ async function checkDomain(browser, domainObj, index, total) {
       if (response) {
         statusCode = response.status();
       }
+
+      // Check if page actually loaded with content
+      // Even if status is 403, if page loaded content it's likely alive (Cloudflare, auth, etc.)
+      const pageContent = await page.content();
+      const hasContent = pageContent.length > 500; // Reasonable threshold for actual content
+      const notErrorPage = !finalUrl.includes('about:blank');
+      const pageActuallyLoaded = hasContent && notErrorPage;
       
+      debugVerbose(`Page content length: ${pageContent.length} bytes`);
+      debugVerbose(`Has content: ${hasContent}, Not error page: ${notErrorPage}`);
+
       // Check if dead
       // 403 is special - it means server is up but denying access
       // Don't treat 403 as dead if we have www variant to try
       const is403 = statusCode === 403;
       const isTrulyDead = (statusCode >= 400 && statusCode !== 403) || statusCode === null;
-      
+
+      // If 403 but page actually loaded with content, treat as active (Cloudflare, auth walls, etc.)
+      if (is403 && pageActuallyLoaded) {
+        clearTimeout(forceCloseTimer);
+        if (!pageClosed) {
+          pageClosed = true;
+          await page.close();
+        }
+        console.log(`  ✓  ${domain} - Active (HTTP 403 but content loaded)${variantLabel}`);
+        return { type: null, data: null };
+      }
+
       // If 403 and not last variant, try next variant (www might work)
       if (is403 && !isLastVariant) {
         clearTimeout(forceCloseTimer);
