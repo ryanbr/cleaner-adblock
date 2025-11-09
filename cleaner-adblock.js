@@ -25,6 +25,14 @@ const IGNORED_DOMAINS = [
   'm.economictimes.com',
   'twitter.com',
   'testpages.adblockplus.org',
+  'all-nettools.com',
+  'dailycaller.com',
+  'demap.info',
+  'medievalists.net',
+  'moviesfoundonline.com',
+  'g.doubleclick.net',
+  'downloads.codefi.re',
+  'cdn.ampproject.org',
   'timesofindia.com'
 ];
 
@@ -34,6 +42,7 @@ const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
 let INPUT_FILE = 'easylist_specific_hide.txt'; // Default
 let ADD_WWW = false; // Default: don't add www
 let IGNORE_SIMILAR = false; // Default: don't ignore similar domain redirects
+let IGNORE_NAV_TIMEOUT = false; // Default: don't ignore navigation timeouts
 
 // Debug options
 let DEBUG = false; // Enable debug output
@@ -50,6 +59,8 @@ for (const arg of args) {
     ADD_WWW = true;
   } else if (arg === '--ignore-similar') {
     IGNORE_SIMILAR = true;
+  } else if (arg === '--ignore-nav-timeout') {
+    IGNORE_NAV_TIMEOUT = true;
   } else if (arg === '--debug') {
     DEBUG = true;
   } else if (arg === '--debug-verbose') {
@@ -88,17 +99,18 @@ Usage:
   node nwss_minimal.js [options]
 
 Options:
-  --input=<file>    Input file to scan (default: easylist_specific_hide.txt)
-  --add-www         Check both domain.com and www.domain.com for bare domains
-  --ignore-similar  Ignore redirects to subdomains of same base domain
-  --debug           Enable basic debug output
-  --debug-verbose   Enable verbose debug output (includes --debug)
-  --debug-network   Enable network request/response logging (includes --debug)
-  --debug-browser   Enable browser event logging (includes --debug)
-  --debug-all       Enable all debug options
-  --test-mode       Only test first 5 domains (for quick testing)
-  --test-count=N    Only test first N domains (enables test mode)
-  --help, -h        Show this help message
+  --input=<file>        Input file to scan (default: easylist_specific_hide.txt)
+  --add-www             Check both domain.com and www.domain.com for bare domains
+  --ignore-similar      Ignore redirects to subdomains of same base domain
+  --ignore-nav-timeout  Don't mark domains as dead if they have navigation timeouts
+  --debug               Enable basic debug output
+  --debug-verbose       Enable verbose debug output (includes --debug)
+  --debug-network       Enable network request/response logging (includes --debug)
+  --debug-browser       Enable browser event logging (includes --debug)
+  --debug-all           Enable all debug options
+  --test-mode           Only test first 5 domains (for quick testing)
+  --test-count=N        Only test first N domains (enables test mode)
+  --help, -h            Show this help message
 
 Ignored Domains:
   You can add domains to the IGNORED_DOMAINS array in the script to skip them.
@@ -649,7 +661,11 @@ async function checkDomain(browser, domainObj, index, total) {
       
       debugVerbose(`Is certificate error: ${isCertError}`);
       
-      const isDead = !isCertError && (
+      // Check if this is a navigation timeout (not a real connection issue)
+      const isNavTimeout = error.message.includes('Navigation timeout of');
+      
+      const isDead = !isCertError && !isNavTimeout && (
+      //const isDead = !isCertError && !(IGNORE_NAV_TIMEOUT && isNavTimeout) && (
         error.message.includes('timeout') || 
         error.message.includes('ERR_NAME_NOT_RESOLVED') ||
         error.message.includes('ERR_CONNECTION_REFUSED') ||
