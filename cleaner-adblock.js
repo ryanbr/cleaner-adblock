@@ -471,24 +471,9 @@ async function checkDomain(browser, domainObj, index, total) {
     await page.setUserAgent(USER_AGENT);
     debugBrowser(`Set user agent: ${USER_AGENT}`);
     
-    // Add network event listeners for debugging
-    if (DEBUG_NETWORK) {
-      page.on('request', request => {
-        debugNetwork(`Request: ${request.method()} ${request.url()}`);
-      });
-      
-      page.on('response', response => {
-        debugNetwork(`Response: ${response.status()} ${response.url()}`);
-      });
-      
-      page.on('requestfailed', request => {
-        debugNetwork(`Request failed: ${request.url()} - ${request.failure().errorText}`);
-      });
-    }
-    
     let forceCloseTimer = null;
     let pageClosed = false;
-    
+
     const forceClosePage = async () => {
       if (!pageClosed) {
         console.log(`  ? Force-closing ${variant} after ${FORCE_CLOSE_TIMEOUT / 1000}s timeout`);
@@ -500,9 +485,9 @@ async function checkDomain(browser, domainObj, index, total) {
         }
       }
     };
-    
+
     forceCloseTimer = setTimeout(forceClosePage, FORCE_CLOSE_TIMEOUT);
-    
+
     try {
       const url = `https://${variant}`;
       if (i === 0) {
@@ -510,13 +495,30 @@ async function checkDomain(browser, domainObj, index, total) {
       } else {
         console.log(`  ? Trying www.${domain}...`);
       }
-      
+
       let statusCode = null;
-      
+
+      // add network event listeners for debugging
+      if (DEBUG_NETWORK) {
+        page.on('request', request => {
+          debugNetwork(`Request: ${request.method()} ${request.url()}`);
+        });
+
+        page.on('requestfailed', request => {
+          debugNetwork(`Request failed: ${request.url()} - ${request.failure().errorText}`);
+        });
+      }
+
+      // single consolidated response listener
       page.on('response', response => {
-        if (response.url() === url || response.url() === url + '/') {
+        const responseUrl = response.url();
+        const isMainResponse = responseUrl === url || responseUrl === url + '/';
+
+        if (isMainResponse) {
           statusCode = response.status();
-          debugNetwork(`Main response received: ${statusCode} for ${response.url()}`);
+          debugNetwork(`Main response received: ${statusCode} for ${responseUrl}`);
+        } else if (DEBUG_NETWORK) {
+          debugNetwork(`Response: ${response.status()} ${responseUrl}`);
         }
       });
       
