@@ -197,10 +197,18 @@ const fs = require('fs');
 const path = require('path');
 
 // load multi-label TLD data from multi_label_suffixes.json
-const tldData = JSON.parse(
-  fs.readFileSync(path.join(__dirname, "multi_label_suffixes.json"), "utf8")
-);
-const multiTLDs = new Set(tldData.multi_label_suffixes);
+let multiTLDs;
+try {
+  const tldData = JSON.parse(
+    fs.readFileSync(path.join(__dirname, "multi_label_suffixes.json"), "utf8")
+  );
+  multiTLDs = new Set(tldData.multi_label_suffixes || []);
+} catch (error) {
+  console.error(`Warning: Could not load multi-label TLD data: ${error.message}`);
+  console.error('Using fallback set of common multi-label TLDs');
+  // Fallback to common multi-label TLDs
+  multiTLDs = new Set(['co.uk', 'com.nz', 'com.au', 'co.za', 'com.br']);
+}
 
 // Debug logging functions
 function debugLog(message, level = 'DEBUG') {
