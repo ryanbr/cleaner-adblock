@@ -241,13 +241,16 @@ function isValidDomain(domain) {
   return true;
 }
 
-// Safely truncate error message without cutting off mid-word
+
 function truncateError(message, maxLength = 120) {
-  if (message.length <= maxLength) {
-    return message;
-  }
-  // Truncate and add ellipsis
-  return message.substring(0, maxLength) + '...';
+  // validate and sanitise inputs
+  const msg = String(message || 'Unknown error');
+  const parsedLength = Math.floor(Number(maxLength));
+  const safeMaxLength = isNaN(parsedLength) || parsedLength <= 0 ? 120 : parsedLength;
+
+  if (msg.length <= safeMaxLength) return msg;
+  // truncate and add ellipsis (total length = maxLength inc. "...")
+  return msg.substring(0, safeMaxLength - 3) + '...';
 }
 
 // Extract base domain (handles subdomains)
