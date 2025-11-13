@@ -80,7 +80,7 @@ for (const arg of args) {
   } else if (arg === '--test-mode') {
     TEST_MODE = true;
   } else if (arg.startsWith('--test-count=')) {
-    TEST_COUNT = parseInt(arg.split('=')[1]) || 5;
+    TEST_COUNT = parseInt(arg.split('=')[1], 10) || 5;
     TEST_MODE = true;
   }
 }
@@ -196,6 +196,9 @@ const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
 
+const ipv4Pattern = /^(\d{1,3}\.){3}\d{1,3}$/;
+const domainCharPattern = /^[a-z0-9.-]+$/;
+
 // Debug logging functions
 function debugLog(message, level = 'DEBUG') {
   if (DEBUG) {
@@ -222,31 +225,19 @@ function debugBrowser(message) {
   }
 }
 
-// Check if domain is valid (not .onion or IP address)
+// check if a domain is valid
 function isValidDomain(domain) {
-  // Skip .onion domains (Tor hidden services)
-  if (domain.endsWith('.onion')) {
-    return false;
-  }
+  if (!domain) return false;
   
-  // Skip IP addresses (IPv4)
-  // Pattern: 0-255.0-255.0-255.0-255
-  const ipv4Pattern = /^(\d{1,3}\.){3}\d{1,3}$/;
-  if (ipv4Pattern.test(domain)) {
-    return false;
-  }
+  if (!domain.includes('.')) return false; // blocks "abc123" and "localhost"
+  if (domain.includes(':')) return false; // ipv6-like (contains :)
   
-  // Skip IPv6 addresses (simplified check)
-  // Contains colons which are not valid in domain names
-  if (domain.includes(':')) {
-    return false;
-  }
+  const lower = domain.toLowerCase();
   
-  // Skip localhost
-  if (domain === 'localhost' || domain === '127.0.0.1') {
-    return false;
-  }
-  
+  if (lower.endsWith('.onion')) return false; // .onion domains
+  if (ipv4Pattern.test(lower)) return false; // ipv4
+  if (!domainCharPattern.test(lower)) return false; // non-domain-safe characters
+
   return true;
 }
 
