@@ -96,7 +96,7 @@ Purpose:
   2. redirect_domains.txt - Domains that redirect (review these)
 
 Usage:
-  node nwss_minimal.js [options]
+  node cleaner-adblock.js [options]
 
 Options:
   --input=<file>        Input file to scan (default: easylist_specific_hide.txt)
@@ -124,13 +124,13 @@ Ignored Domains:
     ];
 
 Examples:
-  node cleanup-site-debug.js
-  node cleanup-site-debug.js --input=my_rules.txt
-  node cleanup-site-debug.js --add-www
-  node cleanup-site-debug.js --input=my_rules.txt --add-www --ignore-similar
-  node cleanup-site-debug.js --debug --test-mode
-  node cleanup-site-debug.js --debug-all --test-count=10
-  node cleanup-site-debug.js --debug-network
+  node cleaner-adblock.js
+  node cleaner-adblock.js --input=my_rules.txt
+  node cleaner-adblock.js --add-www
+  node cleaner-adblock.js --input=my_rules.txt --add-www --ignore-similar
+  node cleaner-adblock.js --debug --test-mode
+  node cleaner-adblock.js --debug-all --test-count=10
+  node cleaner-adblock.js --debug-network
 
 Supported Rule Types:
   Cosmetic/Element Hiding (uBlock Origin):
