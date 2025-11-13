@@ -80,7 +80,8 @@ for (const arg of args) {
   } else if (arg === '--test-mode') {
     TEST_MODE = true;
   } else if (arg.startsWith('--test-count=')) {
-    TEST_COUNT = parseInt(arg.split('=')[1], 10) || 5;
+    const parsed = parseInt(arg.split('=')[1], 10);
+    TEST_COUNT = Math.max(1, isNaN(parsed) ? 5 : parsed);
     TEST_MODE = true;
   }
 }
