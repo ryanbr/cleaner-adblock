@@ -176,12 +176,15 @@ Dead domains (remove from list):
   - DNS resolution failures
   - Connection timeouts
   - Network errors
-  - HTTP 403 (only if all variants return 403)
+  - HTTP 403 (only if all variants return 403 AND it's not anti-bot protection)
 
 Special handling:
   - HTTP 403 Forbidden: If non-www returns 403 but www. works, domain is kept
   - This handles sites like 101soundboards.com where bare domain is blocked
     but www.101soundboards.com works fine
+  - Anti-bot 403 protection: Domains showing "Access Denied" messages with
+    references like errors.edgesuite.net are treated as active (not dead)
+    since they're working but blocking automated requests
 
 Redirect domains (review):
   - Domains that redirect to different domains
@@ -600,9 +603,18 @@ async function checkDomain(browser, domainObj, index, total) {
       debugVerbose(`Page content length: ${pageContent.length} bytes`);
       debugVerbose(`Has content: ${hasContent}, Not error page: ${notErrorPage}`);
 
+      // Check if this is an anti-bot 403 message that should be ignored
+      const isAntiBotMessage = pageContent.includes('Access Denied') && 
+        (pageContent.includes("You don't have permission to access") ||
+         pageContent.includes('Reference #') ||
+         pageContent.includes('errors.edgesuite.net') ||
+         finalUrl.includes('errors.edgesuite.net'));
+      
+      debugVerbose(`Anti-bot 403 detection: ${isAntiBotMessage}`);
+
       // Check if dead
       // 403 is special - it means server is up but denying access
-      // Don't treat 403 as dead if we have www variant to try
+      // Don't treat 403 as dead if we have www variant to try OR if it's an anti-bot message
       const is403 = statusCode === 403;
       const isTrulyDead = (statusCode >= 400 && statusCode !== 403) || statusCode === null;
 
@@ -614,6 +626,17 @@ async function checkDomain(browser, domainObj, index, total) {
           await page.close();
         }
         console.log(`  ✓  ${domain} - Active (HTTP 403 but content loaded)${variantLabel}`);
+        return { type: null, data: null };
+      }
+
+      // If this is an anti-bot 403 message, treat as active (domain is working, just blocking bots)
+      if (is403 && isAntiBotMessage) {
+        clearTimeout(forceCloseTimer);
+        if (!pageClosed) {
+          pageClosed = true;
+          await page.close();
+        }
+        console.log(`  ?  ${domain} - Active (HTTP 403 anti-bot protection detected)${variantLabel}`);
         return { type: null, data: null };
       }
 
