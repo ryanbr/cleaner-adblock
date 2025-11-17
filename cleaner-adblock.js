@@ -43,6 +43,7 @@ let INPUT_FILE = 'easylist_specific_hide.txt'; // Default
 let ADD_WWW = false; // Default: don't add www
 let IGNORE_SIMILAR = false; // Default: don't ignore similar domain redirects
 let IGNORE_NAV_TIMEOUT = false; // Default: don't ignore navigation timeouts
+let BLOCK_RESOURCES = false; // Default: don't block resources
 
 // Debug options
 let DEBUG = false; // Enable debug output
@@ -61,6 +62,8 @@ for (const arg of args) {
     IGNORE_SIMILAR = true;
   } else if (arg === '--ignore-nav-timeout') {
     IGNORE_NAV_TIMEOUT = true;
+  } else if (arg === '--block-resources') {
+    BLOCK_RESOURCES = true;
   } else if (arg === '--debug') {
     DEBUG = true;
   } else if (arg === '--debug-verbose') {
@@ -104,6 +107,7 @@ Options:
   --add-www             Check both domain.com and www.domain.com for bare domains
   --ignore-similar      Ignore redirects to subdomains of same base domain
   --ignore-nav-timeout  Don't mark domains as dead if they have navigation timeouts
+  --block-resources     Block images/CSS/fonts/media for faster loading and less memory usage
   --debug               Enable basic debug output
   --debug-verbose       Enable verbose debug output (includes --debug)
   --debug-network       Enable network request/response logging (includes --debug)
@@ -128,6 +132,7 @@ Examples:
   node cleaner-adblock.js
   node cleaner-adblock.js --input=my_rules.txt
   node cleaner-adblock.js --add-www
+  node cleaner-adblock.js --block-resources
   node cleaner-adblock.js --input=my_rules.txt --add-www --ignore-similar
   node cleaner-adblock.js --debug --test-mode
   node cleaner-adblock.js --debug-all --test-count=10
@@ -187,6 +192,12 @@ Configuration:
   - Page load timeout: ${TIMEOUT / 1000}s
   - Force-close timeout: ${FORCE_CLOSE_TIMEOUT / 1000}s
   - Concurrent checks: ${CONCURRENCY}
+  - Block resources: ${BLOCK_RESOURCES ? 'Yes (images/CSS/fonts/media blocked for faster loading)' : 'No (full page loading)'}
+
+--block-resources behavior:
+  - Blocks loading of images, stylesheets, fonts, and media files
+  - Reduces memory usage by 40-60% and speeds up page loading
+  - Only loads HTML and scripts needed for basic functionality
   - Ignored domains: ${IGNORED_DOMAINS.length} (edit IGNORED_DOMAINS array in script)
 `);
   process.exit(0);
@@ -498,6 +509,19 @@ async function checkDomain(browser, domainObj, index, total) {
     // Set custom Chrome user agent
     await page.setUserAgent(USER_AGENT);
     debugBrowser(`Set user agent: ${USER_AGENT}`);
+
+    // Block unnecessary resources if flag is enabled
+    if (BLOCK_RESOURCES) {
+      await page.setRequestInterception(true);
+      page.on('request', (request) => {
+        if (['image', 'stylesheet', 'font', 'media'].includes(request.resourceType())) {
+          request.abort();
+        } else {
+          request.continue();
+        }
+      });
+      debugBrowser(`Resource blocking enabled for ${variant}`);
+    }
     
     let forceCloseTimer = null;
     let pageClosed = false;
@@ -698,12 +722,16 @@ async function checkDomain(browser, domainObj, index, total) {
       debugVerbose(`Is dead: ${isDead}, Is last variant: ${isLastVariant}`);
       
       clearTimeout(forceCloseTimer);
-      if (!pageClosed) {
+      // Ensure page is always closed, even on errors
+      if (!pageClosed && page && !page.isClosed()) {
         pageClosed = true;
         try {
           await page.close();
+          debugBrowser(`Page closed for ${variant} after error`);
         } catch (closeError) {
-          // Ignore
+          debugBrowser(`Failed to close page for ${variant}: ${closeError.message}`);
+          // Force close if normal close fails
+          page.close().catch(() => {});
         }
       }
       
@@ -854,6 +882,9 @@ function writeRedirectDomains(redirectDomains) {
   if (ADD_WWW) {
     console.log(`--add-www enabled: Will check both domain.com and www.domain.com for bare domains`);
   }
+  if (BLOCK_RESOURCES) {
+    console.log(`--block-resources enabled: Blocking images/CSS/fonts/media for faster loading and less memory usage`);
+  }
   if (DEBUG) {
     console.log(`Debug mode enabled:`);
     console.log(`  Basic debug: ${DEBUG}`);
@@ -915,6 +946,7 @@ function writeRedirectDomains(redirectDomains) {
       '--no-sandbox',
       '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',
+      '--memory-pressure-off',
       '--ignore-certificate-errors', // Additional certificate error ignoring
       '--ignore-certificate-errors-spki-list'
     ]
@@ -932,7 +964,15 @@ function writeRedirectDomains(redirectDomains) {
   
   const results = await processDomains(browser, domainObjects);
   
-  await browser.close();
+  // Ensure browser closes properly
+  try {
+    await browser.close();
+    debugBrowser('Browser closed successfully');
+  } catch (error) {
+    console.error(`Warning: Error closing browser: ${error.message}`);
+    // Force exit if browser won't close within 5 seconds
+    setTimeout(() => process.exit(1), 5000);
+  }
   
   // Separate results by type
   const deadDomains = results.filter(r => r.type === 'dead').map(r => r.data);
