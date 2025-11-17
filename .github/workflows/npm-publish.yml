@@ -18,13 +18,19 @@ jobs:
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
+          cache: 'npm'  # Cache npm dependencies
       
       - name: Configure git
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
       
-      - run: npm ci
+      # OPTIMIZATION 1: Skip installing Puppeteer for publishing
+      - name: Install dependencies (skip Puppeteer download)
+        run: npm ci --ignore-scripts
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: true
+      
       - run: npm version patch
       - run: npm publish
         env:
