@@ -1,8 +1,2 @@
-# ever seen a grown engineer go pale? they just found their .pp(k) in a git log
-**/.ppk/*
-**/.ssh/*
-# ssh and tell no one
-
-# user-generated files
-dead_domains.txt
-redirect_domains.txt
+node_modules/
+package-lock.json
