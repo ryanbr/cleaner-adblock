@@ -39,7 +39,7 @@ const IGNORED_DOMAINS = [
 // Custom User Agent - Chrome on Windows
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
-let INPUT_FILE = 'easylist_specific_hide.txt'; // Default
+let INPUT_FILE = null; // No default - user must specify input file
 let ADD_WWW = false; // Default: don't add www
 let IGNORE_SIMILAR = false; // Default: don't ignore similar domain redirects
 let IGNORE_NAV_TIMEOUT = false; // Default: don't ignore navigation timeouts
@@ -55,7 +55,7 @@ let TEST_COUNT = 5; // Number of domains to test in test mode
 
 for (const arg of args) {
   if (arg.startsWith('--input=')) {
-    INPUT_FILE = arg.split('=')[1] || 'easylist_specific_hide.txt';
+    INPUT_FILE = arg.split('=')[1] || null;
   } else if (arg === '--add-www') {
     ADD_WWW = true;
   } else if (arg === '--ignore-similar') {
@@ -103,7 +103,7 @@ Usage:
   node cleaner-adblock.js [options]
 
 Options:
-  --input=<file>        Input file to scan (default: easylist_specific_hide.txt)
+  --input=<file>        Input file to scan (REQUIRED)
   --add-www             Check both domain.com and www.domain.com for bare domains
   --ignore-similar      Ignore redirects to subdomains of same base domain
   --ignore-nav-timeout  Don't mark domains as dead if they have navigation timeouts
@@ -129,7 +129,6 @@ Ignored Domains:
     ];
 
 Examples:
-  node cleaner-adblock.js
   node cleaner-adblock.js --input=my_rules.txt
   node cleaner-adblock.js --add-www
   node cleaner-adblock.js --block-resources
@@ -878,6 +877,15 @@ function writeRedirectDomains(redirectDomains) {
 (async () => {
   console.log('=== Minimal Domain Scanner v2.0 ===\n');
   
+  // Check if input file is specified
+  if (!INPUT_FILE) {
+    console.error('? Error: No input file specified');
+    console.log('Usage: node cleaner-adblock.js --input=<file>');
+    console.log('Example: node cleaner-adblock.js --input=my_rules.txt');
+    console.log('\nUse --help for more information.\n');
+    process.exit(1);
+  }
+  
   console.log(`Input file: ${INPUT_FILE}`);
   if (ADD_WWW) {
     console.log(`--add-www enabled: Will check both domain.com and www.domain.com for bare domains`);
@@ -902,8 +910,7 @@ function writeRedirectDomains(redirectDomains) {
     domains = parseDomainsFromFile(INPUT_FILE);
   } catch (error) {
     console.error(`\n✗ Error: ${error.message}`);
-    console.log(`\nTip: Use --input=<file> to specify a different input file`);
-    console.log(`Example: node cleaner-adblock.js --input=my_rules.txt\n`);
+    console.log(`\nPlease check that the file '${INPUT_FILE}' exists and is readable.\n`);
     process.exit(1);
   }
   
