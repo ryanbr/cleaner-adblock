@@ -1,5 +1,52 @@
 {
+  "name": "cleaner-adblock",
+  "version": "2.0.0",
+  "description": "A minimal domain scanner for ad-blocking filter lists. Finds dead domains and redirecting domains using headless browser automation.",
+  "main": "cleaner-adblock.js",
+  "bin": {
+    "cleaner-adblock": "./cleaner-adblock.js"
+  },
+  "scripts": {
+    "start": "node cleaner-adblock.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "domain",
+    "scanner",
+    "adblock",
+    "brave",
+    "filter",
+    "puppeteer",
+    "dead-domains",
+    "redirect",
+    "adguard",
+    "ublock",
+    "easylist",
+    "browser-automation"
+  ],
+  "author": "FanboyNZ",
+  "license": "GPL-3.0",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "dependencies": {
-    "puppeteer": "^24.28.0"
-  }
+    "puppeteer": "^21.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ryanbr/cleaner-adblock.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "bugs": {
+    "url": "https://github.com/ryanbr/cleaner-adblock/issues"
+  },
+  "homepage": "https://github.com/ryanbr/cleaner-adblock#readme",
+  "files": [
+    "cleaner-adblock.js",
+    "multi_label_suffixes.json",
+    "README.md",
+    "LICENSE"
+  ]
 }
