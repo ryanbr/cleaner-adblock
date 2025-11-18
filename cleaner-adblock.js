@@ -44,6 +44,7 @@ let ADD_WWW = false; // Default: don't add www
 let IGNORE_SIMILAR = false; // Default: don't ignore similar domain redirects
 let IGNORE_NAV_TIMEOUT = false; // Default: don't ignore navigation timeouts
 let BLOCK_RESOURCES = false; // Default: don't block resources
+let SIMPLE_DOMAINS = false; // New option: parse as simple domain list
 
 // Debug options
 let DEBUG = false; // Enable debug output
@@ -64,6 +65,8 @@ for (const arg of args) {
     IGNORE_NAV_TIMEOUT = true;
   } else if (arg === '--block-resources') {
     BLOCK_RESOURCES = true;
+  } else if (arg === '--simple-domains') {
+    SIMPLE_DOMAINS = true;
   } else if (arg === '--debug') {
     DEBUG = true;
   } else if (arg === '--debug-verbose') {
@@ -108,6 +111,7 @@ Options:
   --ignore-similar      Ignore redirects to subdomains of same base domain
   --ignore-nav-timeout  Don't mark domains as dead if they have navigation timeouts
   --block-resources     Block images/CSS/fonts/media for faster loading and less memory usage
+  --simple-domains      Parse input as simple domain list (one domain per line or comma-separated)
   --debug               Enable basic debug output
   --debug-verbose       Enable verbose debug output (includes --debug)
   --debug-network       Enable network request/response logging (includes --debug)
@@ -130,6 +134,7 @@ Ignored Domains:
 
 Examples:
   node cleaner-adblock.js --input=my_rules.txt
+  node cleaner-adblock.js --input=domains.txt --simple-domains
   node cleaner-adblock.js --add-www
   node cleaner-adblock.js --block-resources
   node cleaner-adblock.js --input=my_rules.txt --add-www --ignore-similar
@@ -137,7 +142,24 @@ Examples:
   node cleaner-adblock.js --debug-all --test-count=10
   node cleaner-adblock.js --debug-network
 
-Supported Rule Types:
+Supported Input Formats:
+  Default Mode (without --simple-domains):
+    [existing adblock rule documentation]
+      
+  Simple Domains Mode (with --simple-domains):
+    One domain per line:
+      domain.com
+      subdomain.example.com
+      another-site.net
+      
+    Comma-separated on same line:
+      domain.com,domain2.com,domain3.com
+      
+    Mixed format:
+      domain.com
+      site2.com,site3.com
+      subdomain.example.org
+
   Cosmetic/Element Hiding (uBlock Origin):
     domain.com##.selector
     domain.com##+js(scriptlet)
@@ -323,6 +345,42 @@ function isSimilarDomainRedirect(originalDomain, finalDomain) {
   return originalBase === finalBase;
 }
 
+// Parse simple domain list format
+function parseSimpleDomains(line) {
+  line = line.trim();
+  
+  // Skip empty lines and comments
+  if (!line || line.startsWith('#') || line.startsWith('!') || line.startsWith('//')) {
+    return [];
+  }
+  
+  const validDomains = [];
+  
+  // Split by comma to handle comma-separated domains
+  const domainCandidates = line.split(',').map(d => d.trim());
+  
+  for (let domain of domainCandidates) {
+    // Skip empty entries
+    if (!domain) continue;
+    
+    // Remove protocol if present
+    domain = domain.replace(/^https?:\/\//, '');
+    
+    // Remove path if present (everything after first /)
+    domain = domain.split('/')[0];
+    
+    // Remove port if present
+    domain = domain.split(':')[0];
+    
+    // Basic validation and cleanup
+    if (domain && isValidDomain(domain)) {
+      validDomains.push(domain.toLowerCase());
+    }
+  }
+  
+  return validDomains;
+}
+
 // Extract domains from uBlock Origin and Adguard style rule lines
 function extractDomains(line) {
   line = line.trim();
@@ -443,7 +501,15 @@ function parseDomainsFromFile(filePath) {
   const domains = new Set();
   
   for (const line of lines) {
-    const extractedDomains = extractDomains(line);
+    let extractedDomains;
+    
+    // Use simple domain parsing if --simple-domains flag is set
+    if (SIMPLE_DOMAINS) {
+      extractedDomains = parseSimpleDomains(line);
+    } else {
+      extractedDomains = extractDomains(line);
+    }
+
     for (const domain of extractedDomains) {
       domains.add(domain);
     }
@@ -905,11 +971,15 @@ function writeRedirectDomains(redirectDomains) {
     console.error('? Error: No input file specified');
     console.log('Usage: node cleaner-adblock.js --input=<file>');
     console.log('Example: node cleaner-adblock.js --input=my_rules.txt');
+    console.log('Example: node cleaner-adblock.js --input=domains.txt --simple-domains');
     console.log('\nUse --help for more information.\n');
     process.exit(1);
   }
   
   console.log(`Input file: ${INPUT_FILE}`);
+  if (SIMPLE_DOMAINS) {
+    console.log(`--simple-domains enabled: Parsing as simple domain list`);
+  }
   if (ADD_WWW) {
     console.log(`--add-www enabled: Will check both domain.com and www.domain.com for bare domains`);
   }
