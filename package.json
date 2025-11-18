@@ -1,6 +1,6 @@
 {
   "name": "cleaner-adblock",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "A minimal domain scanner for ad-blocking filter lists. Finds dead domains and redirecting domains using headless browser automation.",
   "main": "cleaner-adblock.js",
   "bin": {
