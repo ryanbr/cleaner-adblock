@@ -454,12 +454,25 @@ function extractDomains(line) {
           validDomains.push(domain);
         }
       }
+    }   
+  }
+  
+  // Extract domain from network rule format (||domain.com^ or ||domain.com/)
+  if (line.includes('||')) {
+    const networkMatch = line.match(/\|\|([a-z0-9.-]+)/i);
+    if (networkMatch) {
+      const domain = networkMatch[1];
+      
+      // Skip wildcards
+      if (!domain.includes('*') && isValidDomain(domain)) {
+        validDomains.push(domain);
+      }
     }
-    
-    // Return early for network rules - don't also try to parse as element hiding
-    if (validDomains.length > 0) {
-      return validDomains;
-    }
+  }
+  
+  // Return early for network rules if we found any domains
+  if (validDomains.length > 0) {
+    return validDomains;
   }
   
   // Check for uBlock Origin element hiding/cosmetic rules (##, #@#, etc.)
