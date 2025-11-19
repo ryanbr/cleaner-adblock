@@ -33,11 +33,12 @@ const IGNORED_DOMAINS = [
   'g.doubleclick.net',
   'downloads.codefi.re',
   'cdn.ampproject.org',
-  'timesofindia.com'
+  'timesofindia.com',
+  'yahoo.com'
 ];
 
 // Custom User Agent - Chrome on Windows
-const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36';
 
 let INPUT_FILE = null; // No default - user must specify input file
 let ADD_WWW = false; // Default: don't add www
