@@ -1054,7 +1054,7 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
   }
   
   const browser = await puppeteer.launch({
-    headless: true,
+    headless: "new",
     ignoreHTTPSErrors: true, // Ignore SSL/certificate errors
     args: [
       '--no-sandbox',
