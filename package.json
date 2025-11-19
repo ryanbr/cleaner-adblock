@@ -30,7 +30,7 @@
     "node": ">=20.0.0"
   },
   "dependencies": {
-    "puppeteer": "^21.0.0"
+    "puppeteer": "^24.0.0"
   },
   "repository": {
     "type": "git",
