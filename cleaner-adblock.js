@@ -392,7 +392,7 @@ function extractDomains(line) {
   
   const validDomains = [];
   
-  // Check for Adguard rules (##, #@#, #$#, #%#, #?#, #@$?#)
+  // Check for Adguard rules (##, #@#, #$#, #%#, #?#, #@$?#, $$)
   // Examples:
   // domain.com##selector
   // domain.com#@#selector (exception)
@@ -400,8 +400,9 @@ function extractDomains(line) {
   // domain.com#%#//scriptlet(...)
   // domain.com#?#selector (extended CSS)
   // domain.com#@$?#selector (extended CSS exception)
+  // domain.com$$script[...] (HTML filtering)
   // domain1.com,domain2.com##selector (multiple domains)
-  const adguardMatch = line.match(/^([^#]+)#[@$%?]*#/);
+  const adguardMatch = line.match(/^([^#$]+)(?:#[@$%?]*#|\$\$)/);
   if (adguardMatch) {
     const domainPart = adguardMatch[1];
     const domainList = domainPart.split(',').map(d => d.trim());
