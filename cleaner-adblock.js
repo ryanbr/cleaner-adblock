@@ -907,10 +907,11 @@ async function processDomains(browser, domainObjects) {
 }
 
 // Write dead domains to file
-function writeDeadDomains(deadDomains, scanTimestamp) {
+function writeDeadDomains(deadDomains, scanTimestamp, inputFile) {
   const lines = [
     `# Dead/Non-Existent Domains`,
     `# These domains don't resolve and should be removed from filter lists`,
+    `# Scanned file: ${inputFile}`,
     `# Generated: ${new Date().toISOString()}`,
     `# Total found: ${deadDomains.length}`,
     `#`,
@@ -936,10 +937,11 @@ function writeDeadDomains(deadDomains, scanTimestamp) {
 }
 
 // Write redirect domains to file
-function writeRedirectDomains(redirectDomains, scanTimestamp) {
+function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
   const lines = [
     `# Redirecting Domains`,
     `# These domains redirect to different domains - review for updates`,
+    `# Scanned file: ${inputFile}`,
     `# Generated: ${new Date().toISOString()}`,
     `# Total found: ${redirectDomains.length}`,
     `#`,
@@ -1097,14 +1099,14 @@ function writeRedirectDomains(redirectDomains, scanTimestamp) {
   console.log(`Active (no issues): ${domains.length - deadDomains.length - redirectDomains.length}`);
   
   if (deadDomains.length > 0) {
-    writeDeadDomains(deadDomains, SCAN_TIMESTAMP);
+    writeDeadDomains(deadDomains, SCAN_TIMESTAMP, INPUT_FILE);
     console.log(`\n?? Tip: Remove these ${deadDomains.length} dead domains from your filter list`);
   } else {
     console.log('\n? No dead domains found');
   }
   
   if (redirectDomains.length > 0) {
-    writeRedirectDomains(redirectDomains, SCAN_TIMESTAMP);
+    writeRedirectDomains(redirectDomains, SCAN_TIMESTAMP, INPUT_FILE);
     console.log(`\n?? Tip: Review these ${redirectDomains.length} redirecting domains - they may need rule updates`);
   } else {
     console.log('? No redirecting domains found');
