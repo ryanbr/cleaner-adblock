@@ -11,8 +11,8 @@ const args = process.argv.slice(2);
 const TIMEOUT = 25000; // 25 second timeout for page loads
 const FORCE_CLOSE_TIMEOUT = 60000; // 60 second fallback to force-close any tab
 const CONCURRENCY = 12; // Number of concurrent checks
-const DEAD_DOMAINS_FILE = 'dead_domains.txt';
-const REDIRECT_DOMAINS_FILE = 'redirect_domains.txt';
+let DEAD_DOMAINS_FILE; // Will be set with timestamp in main()
+let REDIRECT_DOMAINS_FILE; // Will be set with timestamp in main()
 
 // Ignored Domains - domains to skip checking (add domains that are incorrectly flagged)
 // These domains will be completely skipped during scanning
@@ -907,7 +907,7 @@ async function processDomains(browser, domainObjects) {
 }
 
 // Write dead domains to file
-function writeDeadDomains(deadDomains) {
+function writeDeadDomains(deadDomains, scanTimestamp) {
   const lines = [
     `# Dead/Non-Existent Domains`,
     `# These domains don't resolve and should be removed from filter lists`,
@@ -936,7 +936,7 @@ function writeDeadDomains(deadDomains) {
 }
 
 // Write redirect domains to file
-function writeRedirectDomains(redirectDomains) {
+function writeRedirectDomains(redirectDomains, scanTimestamp) {
   const lines = [
     `# Redirecting Domains`,
     `# These domains redirect to different domains - review for updates`,
@@ -966,6 +966,18 @@ function writeRedirectDomains(redirectDomains) {
 (async () => {
   console.log('=== Minimal Domain Scanner v2.0 ===\n');
   
+  // Generate timestamp once for consistent dating across both files
+  const SCAN_TIMESTAMP = new Date().toISOString();
+  const FILENAME_TIMESTAMP = SCAN_TIMESTAMP.replace(/:/g, '-').replace(/\..+/, ''); // 2024-11-19T12-34-56
+  
+  // Set filenames with timestamp
+  DEAD_DOMAINS_FILE = `dead_domains_${FILENAME_TIMESTAMP}.txt`;
+  REDIRECT_DOMAINS_FILE = `redirect_domains_${FILENAME_TIMESTAMP}.txt`;
+  
+  console.log(`Output files will be:`);
+  console.log(`  Dead domains: ${DEAD_DOMAINS_FILE}`);
+  console.log(`  Redirect domains: ${REDIRECT_DOMAINS_FILE}\n`);
+
   // Check if input file is specified
   if (!INPUT_FILE) {
     console.error('? Error: No input file specified');
@@ -1085,14 +1097,14 @@ function writeRedirectDomains(redirectDomains) {
   console.log(`Active (no issues): ${domains.length - deadDomains.length - redirectDomains.length}`);
   
   if (deadDomains.length > 0) {
-    writeDeadDomains(deadDomains);
+    writeDeadDomains(deadDomains, SCAN_TIMESTAMP);
     console.log(`\n?? Tip: Remove these ${deadDomains.length} dead domains from your filter list`);
   } else {
     console.log('\n? No dead domains found');
   }
   
   if (redirectDomains.length > 0) {
-    writeRedirectDomains(redirectDomains);
+    writeRedirectDomains(redirectDomains, SCAN_TIMESTAMP);
     console.log(`\n?? Tip: Review these ${redirectDomains.length} redirecting domains - they may need rule updates`);
   } else {
     console.log('? No redirecting domains found');
