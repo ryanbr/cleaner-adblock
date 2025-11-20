@@ -805,30 +805,10 @@ async function checkDomain(browser, domainObj, index, total) {
       if (isDead) {
         const reason = truncateError(error.message);
         console.log(`  ??  ${domain} - Dead (${reason})${variantLabel}`);
-        
-        // If --check-dig or --check-dig-always is enabled, verify with DNS lookup
-        let dnsInfo = null;
-        if (CHECK_DIG || CHECK_DIG_ALWAYS) {
-          console.log(`  ??  Verifying with DNS lookup...`);
-          const dnsCheck = await checkDNSRecord(domain);
-          dnsInfo = dnsCheck;
-          
-          if (dnsCheck.hasRecord) {
-            console.log(`  ??  DNS A record found for ${dnsCheck.variant}: ${dnsCheck.ips.join(', ')}`);
-
-            // If --check-dig-always, don't mark as dead if DNS record exists
-            if (CHECK_DIG_ALWAYS) {
-              console.log(`  ?  Skipping (has valid DNS A record, likely temporary HTTP issue)`);
-              return { type: null, data: null };
-            }
-          } else {
-            console.log(`  ?  No DNS A record found`);
-          }
-        }
-        
+               
         result = { 
           type: 'dead', 
-          data: { domain, reason, dnsInfo }
+          data: { domain, reason }
         };
       } else {
         const reason = truncateError(error.message);
@@ -1094,6 +1074,47 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
   const deadDomains = results.filter(r => r.type === 'dead').map(r => r.data);
   const redirectDomains = results.filter(r => r.type === 'redirect').map(r => r.data);
   
+  // Batch DNS checks for all dead domains (if enabled)
+  if ((CHECK_DIG || CHECK_DIG_ALWAYS) && deadDomains.length > 0) {
+    // Only check DNS for connection errors (not HTTP errors like 404)
+    const domainsToCheck = deadDomains.filter(item => 
+      !item.statusCode || item.reason.includes('ERR_') || item.reason.includes('timeout')
+    );
+    console.log(`\n?? Running DNS checks on ${domainsToCheck.length} dead domains in parallel...`);
+    
+    const dnsChecks = await Promise.all(
+      domainsToCheck.map(async (item) => {
+        const dnsCheck = await checkDNSRecord(item.domain);
+        return { domain: item.domain, dnsInfo: dnsCheck };
+      })
+    );
+    
+    // Create a map for quick lookup
+    const dnsMap = new Map(dnsChecks.map(check => [check.domain, check.dnsInfo]));
+    
+    // Add DNS info to each dead domain
+    for (const item of deadDomains) {
+      item.dnsInfo = dnsMap.get(item.domain);
+    }
+    
+    // If --check-dig-always, filter out domains with DNS records
+    if (CHECK_DIG_ALWAYS) {
+      const beforeCount = deadDomains.length;
+      const filteredDomains = deadDomains.filter(item => !item.dnsInfo.hasRecord);
+      const removedCount = beforeCount - filteredDomains.length;
+      
+      if (removedCount > 0) {
+        console.log(`? Filtered out ${removedCount} domain(s) with valid DNS A records`);
+      }
+      
+      // Replace deadDomains array
+      deadDomains.length = 0;
+      deadDomains.push(...filteredDomains);
+   }
+    
+    console.log(`? DNS checks completed\n`);
+  }
+
   console.log(`\n=== Summary ===`);
   console.log(`Total domains checked: ${domains.length}`);
   console.log(`Dead/non-existent: ${deadDomains.length}`);
