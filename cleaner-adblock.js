@@ -46,6 +46,8 @@ let IGNORE_SIMILAR = false; // Default: don't ignore similar domain redirects
 let IGNORE_NAV_TIMEOUT = false; // Default: don't ignore navigation timeouts
 let BLOCK_RESOURCES = false; // Default: don't block resources
 let SIMPLE_DOMAINS = false; // New option: parse as simple domain list
+let CHECK_DIG = false; // Default: don't check DNS A records
+let CHECK_DIG_ALWAYS = false; // Default: don't filter dead domains by DNS
 
 // Debug options
 let DEBUG = false; // Enable debug output
@@ -68,6 +70,10 @@ for (const arg of args) {
     BLOCK_RESOURCES = true;
   } else if (arg === '--simple-domains') {
     SIMPLE_DOMAINS = true;
+  } else if (arg === '--check-dig') {
+    CHECK_DIG = true;
+  } else if (arg === '--check-dig-always') {
+    CHECK_DIG_ALWAYS = true;
   } else if (arg === '--debug') {
     DEBUG = true;
   } else if (arg === '--debug-verbose') {
@@ -113,6 +119,8 @@ Options:
   --ignore-nav-timeout  Don't mark domains as dead if they have navigation timeouts
   --block-resources     Block images/CSS/fonts/media for faster loading and less memory usage
   --simple-domains      Parse input as simple domain list (one domain per line or comma-separated)
+  --check-dig           Verify dead domains with DNS A record lookup (dig) and show IP addresses
+  --check-dig-always    Only report dead domains with NO DNS A records (implies --check-dig)
   --debug               Enable basic debug output
   --debug-verbose       Enable verbose debug output (includes --debug)
   --debug-network       Enable network request/response logging (includes --debug)
@@ -142,6 +150,8 @@ Examples:
   node cleaner-adblock.js --debug --test-mode
   node cleaner-adblock.js --debug-all --test-count=10
   node cleaner-adblock.js --debug-network
+  node cleaner-adblock.js --input=my_rules.txt --check-dig
+  node cleaner-adblock.js --input=my_rules.txt --check-dig-always
 
 Supported Input Formats:
   Default Mode (without --simple-domains):
@@ -228,6 +238,7 @@ Configuration:
   process.exit(0);
 }
 
+const { execSync } = require('child_process');
 // Now load required modules
 const puppeteer = require('puppeteer');
 const fs = require('fs');
@@ -567,6 +578,50 @@ function expandDomainsWithWww(domains) {
   });
 }
 
+// Check DNS A record for domain using dig
+async function checkDNSRecord(domain) {
+  try {
+    // Try both www and non-www variants
+    const variants = domain.startsWith('www.') 
+      ? [domain, domain.replace(/^www\./, '')]
+      : [domain, `www.${domain}`];
+    
+    for (const variant of variants) {
+      try {
+        const result = execSync(`dig +short A ${variant}`, { 
+          encoding: 'utf8',
+          timeout: 5000,
+          stdio: ['pipe', 'pipe', 'ignore'] // Suppress stderr
+        }).trim();
+        
+        if (result) {
+          // Filter out non-IP responses (sometimes dig returns CNAME or other records)
+          const ips = result.split('\n').filter(line => {
+            // Check if line looks like an IPv4 address
+            return /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(line.trim());
+          });
+          
+          if (ips.length > 0) {
+            return {
+              hasRecord: true,
+              variant: variant,
+              ips: ips
+            };
+          }
+        }
+      } catch (err) {
+        // Try next variant
+        continue;
+      }
+    }
+    
+    return { hasRecord: false, variant: null, ips: [] };
+  } catch (error) {
+    debugVerbose(`DNS check error for ${domain}: ${error.message}`);
+    return { hasRecord: false, variant: null, ips: [] };
+  }
+}
+
 // Check if domain is dead or redirecting
 // domainObj format: { original: 'domain.com', variants: ['domain.com', 'www.domain.com'] }
 async function checkDomain(browser, domainObj, index, total) {
@@ -851,9 +906,30 @@ async function checkDomain(browser, domainObj, index, total) {
       if (isDead) {
         const reason = truncateError(error.message);
         console.log(`  ??  ${domain} - Dead (${reason})${variantLabel}`);
+        
+        // If --check-dig or --check-dig-always is enabled, verify with DNS lookup
+        let dnsInfo = null;
+        if (CHECK_DIG || CHECK_DIG_ALWAYS) {
+          console.log(`  ??  Verifying with DNS lookup...`);
+          const dnsCheck = await checkDNSRecord(domain);
+          dnsInfo = dnsCheck;
+          
+          if (dnsCheck.hasRecord) {
+            console.log(`  ??  DNS A record found for ${dnsCheck.variant}: ${dnsCheck.ips.join(', ')}`);
+
+            // If --check-dig-always, don't mark as dead if DNS record exists
+            if (CHECK_DIG_ALWAYS) {
+              console.log(`  ?  Skipping (has valid DNS A record, likely temporary HTTP issue)`);
+              return { type: null, data: null };
+            }
+          } else {
+            console.log(`  ?  No DNS A record found`);
+          }
+        }
+        
         result = { 
           type: 'dead', 
-          data: { domain, statusCode: null, reason: error.message } // Store full error in data
+          data: { domain, reason, dnsInfo }
         };
       } else {
         const reason = truncateError(error.message);
@@ -939,7 +1015,16 @@ function writeDeadDomains(deadDomains, scanTimestamp, inputFile) {
   ];
   
   for (const item of deadDomains) {
-    lines.push(`${item.domain} # ${item.reason}`);
+    let line = `${item.domain} # ${item.reason}`;
+    
+    // Add DNS info if available
+    if (item.dnsInfo && item.dnsInfo.hasRecord) {
+      line += ` | DNS: ${item.dnsInfo.variant} -> ${item.dnsInfo.ips.join(', ')}`;
+    } else if (item.dnsInfo && !item.dnsInfo.hasRecord) {
+      line += ` | DNS: No A record`;
+    }
+    
+    lines.push(line);
   }
 
   try {
@@ -1008,6 +1093,9 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
   console.log(`Input file: ${INPUT_FILE}`);
   if (SIMPLE_DOMAINS) {
     console.log(`--simple-domains enabled: Parsing as simple domain list`);
+  }
+  if (CHECK_DIG_ALWAYS) {
+    console.log(`--check-dig-always enabled: Only reporting domains with NO DNS A records`);
   }
   if (ADD_WWW) {
     console.log(`--add-www enabled: Will check both domain.com and www.domain.com for bare domains`);
