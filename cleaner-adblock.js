@@ -104,136 +104,35 @@ if (args.includes('--help') || args.includes('-h')) {
   console.log(`
 Minimal Domain Scanner v2.0
 
-Purpose:
-  Scans filter lists and separates results into two files:
-  1. dead_domains.txt - Domains that don't resolve (remove these)
-  2. redirect_domains.txt - Domains that redirect (review these)
+Scans filter lists to find dead/redirecting domains.
 
 Usage:
-  node cleaner-adblock.js [options]
+  node cleaner-adblock.js --input=<file> [options]
 
 Options:
   --input=<file>        Input file to scan (REQUIRED)
-  --add-www             Check both domain.com and www.domain.com for bare domains
-  --ignore-similar      Ignore redirects to subdomains of same base domain
-  --ignore-nav-timeout  Don't mark domains as dead if they have navigation timeouts
-  --block-resources     Block images/CSS/fonts/media for faster loading and less memory usage
-  --simple-domains      Parse input as simple domain list (one domain per line or comma-separated)
-  --check-dig           Verify dead domains with DNS A record lookup (dig) and show IP addresses
-  --check-dig-always    Only report dead domains with NO DNS A records (implies --check-dig)
+  --add-www             Check both bare domain and www variant
+  --ignore-similar      Skip redirects to same base domain
+  --block-resources     Block images/CSS/fonts for faster scans
+  --simple-domains      Parse as plain domain list (one per line)
+  --check-dig           Verify dead domains with DNS lookup
+  --check-dig-always    Only report domains with no DNS A records
   --debug               Enable basic debug output
-  --debug-verbose       Enable verbose debug output (includes --debug)
-  --debug-network       Enable network request/response logging (includes --debug)
-  --debug-browser       Enable browser event logging (includes --debug)
+  --debug-verbose       Verbose debug output
+  --debug-network       Log network requests
+  --debug-browser       Log browser events
   --debug-all           Enable all debug options
-  --test-mode           Only test first 5 domains (for quick testing)
-  --test-count=N        Only test first N domains (enables test mode)
-  --help, -h            Show this help message
+  --test-mode           Test first 5 domains only
+  --test-count=N        Test first N domains
+  -h, --help            Show this help
 
-Ignored Domains:
-  You can add domains to the IGNORED_DOMAINS array in the script to skip them.
-  These domains won't be checked and won't appear in any output files.
-  Useful for domains that are incorrectly flagged as dead or redirect.
-  
-  Edit the script and add domains to the IGNORED_DOMAINS array:
-    const IGNORED_DOMAINS = [
-      'example.com',
-      'false-positive.net',
-    ];
-
-Examples:
-  node cleaner-adblock.js --input=my_rules.txt
-  node cleaner-adblock.js --input=domains.txt --simple-domains
-  node cleaner-adblock.js --add-www
-  node cleaner-adblock.js --block-resources
-  node cleaner-adblock.js --input=my_rules.txt --add-www --ignore-similar
-  node cleaner-adblock.js --debug --test-mode
-  node cleaner-adblock.js --debug-all --test-count=10
-  node cleaner-adblock.js --debug-network
-  node cleaner-adblock.js --input=my_rules.txt --check-dig
-  node cleaner-adblock.js --input=my_rules.txt --check-dig-always
-
-Supported Input Formats:
-  Default Mode (without --simple-domains):
-    [existing adblock rule documentation]
-      
-  Simple Domains Mode (with --simple-domains):
-    One domain per line:
-      domain.com
-      subdomain.example.com
-      another-site.net
-      
-    Comma-separated on same line:
-      domain.com,domain2.com,domain3.com
-      
-    Mixed format:
-      domain.com
-      site2.com,site3.com
-      subdomain.example.org
-
-  Cosmetic/Element Hiding (uBlock Origin):
-    domain.com##.selector
-    domain.com##+js(scriptlet)
-    domain.com#@#.selector
-    
-  Adguard Rules:
-    domain.com##selector (element hiding)
-    domain.com#@#selector (exception)
-    domain.com#$#selector (CSS injection)
-    domain.com#%#//scriptlet(...) (scriptlet)
-    domain.com#?#selector (extended CSS)
-    domain.com#@$?#selector (extended CSS exception)
-    Multiple domains: domain1.com,domain2.com##selector
-    
-  Network Rules:
-    /path$script,domain=example.com
-    ||domain.com^$script,domain=site1.com|site2.com
-    Extracts domains from domain= parameter
-
---add-www behavior:
-  - domain.com ? checks both domain.com AND www.domain.com
-  - If EITHER works, domain is marked as active
-  - sub.domain.com ? only checks sub.domain.com (no www added)
-  - www.domain.com ? only checks www.domain.com (already has www)
-  - Works with both cosmetic and network rules!
-
---ignore-similar behavior:
-  - Skips redirects to subdomains of the same base domain
-  - example.com ? sub.example.com (ignored, same base domain)
-  - example.com ? different.com (flagged, different domain)
-  - Reduces noise from internal subdomain redirects
-  - Useful for sites that redirect to CDN/regional subdomains
-
-Dead domains (remove from list):
-  - HTTP 404, 410, 5xx errors
-  - DNS resolution failures
-  - Connection timeouts
-  - Network errors
-  - HTTP 403 (only if all variants return 403 AND it's not anti-bot protection)
-
-Special handling:
-  - HTTP 403 Forbidden: If non-www returns 403 but www. works, domain is kept
-  - This handles sites like 101soundboards.com where bare domain is blocked
-    but www.101soundboards.com works fine
-  - Anti-bot 403 protection: Domains showing "Access Denied" messages with
-    references like errors.edgesuite.net are treated as active (not dead)
-    since they're working but blocking automated requests
-
-Redirect domains (review):
-  - Domains that redirect to different domains
-  - May still be valid or may need updating
+Output Files:
+  dead_domains_TIMESTAMP.txt      - Domains that don't resolve (remove these)
+  redirect_domains_TIMESTAMP.txt  - Domains that redirect (review these)
 
 Configuration:
-  - Page load timeout: ${TIMEOUT / 1000}s
-  - Force-close timeout: ${FORCE_CLOSE_TIMEOUT / 1000}s
-  - Concurrent checks: ${CONCURRENCY}
-  - Block resources: ${BLOCK_RESOURCES ? 'Yes (images/CSS/fonts/media blocked for faster loading)' : 'No (full page loading)'}
-
---block-resources behavior:
-  - Blocks loading of images, stylesheets, fonts, and media files
-  - Reduces memory usage by 40-60% and speeds up page loading
-  - Only loads HTML and scripts needed for basic functionality
-  - Ignored domains: ${IGNORED_DOMAINS.length} (edit IGNORED_DOMAINS array in script)
+  Timeout: ${TIMEOUT / 1000}s | Concurrency: ${CONCURRENCY} | Ignored domains: ${IGNORED_DOMAINS.length}
+  Edit IGNORED_DOMAINS array in script to skip specific domains.
 `);
   process.exit(0);
 }
