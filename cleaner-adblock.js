@@ -141,7 +141,9 @@ Configuration:
   process.exit(0);
 }
 
-const { execSync } = require('child_process');
+const { execSync, exec } = require('child_process');
+const { promisify } = require('util');
+const execAsync = promisify(exec);
 // Now load required modules
 const puppeteer = require('puppeteer');
 const fs = require('fs');
@@ -494,11 +496,11 @@ async function checkDNSRecord(domain) {
     
     for (const variant of variants) {
       try {
-        const result = execSync(`dig +short A ${variant}`, { 
+        const { stdout } = await execAsync(`dig +short A ${variant}`, { 
           encoding: 'utf8',
-          timeout: 5000,
-          stdio: ['pipe', 'pipe', 'ignore'] // Suppress stderr
-        }).trim();
+          timeout: 5000
+        });
+        const result = stdout.trim();
         
         if (result) {
           // Filter out non-IP responses (sometimes dig returns CNAME or other records)
