@@ -1128,7 +1128,9 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
     // If --check-dig-always, filter out domains with DNS records
     if (CHECK_DIG_ALWAYS) {
       const beforeCount = deadDomains.length;
-      const filteredDomains = deadDomains.filter(item => !item.dnsInfo.hasRecord);
+      const filteredDomains = deadDomains.filter(item => 
+        item.dnsInfo && !item.dnsInfo.hasRecord
+      );
       const removedCount = beforeCount - filteredDomains.length;
       
       if (removedCount > 0) {
