@@ -129,12 +129,27 @@ function cleanCosmeticDomains(line, domainsToRemove) {
 }
 
 // Export cleaned filter list
-function exportCleanedList(inputFile, deadDomains, redirectDomains, timestamp) {
+function exportCleanedList(inputFile, deadDomains, redirectDomains, timestamp, ignoreSimilar = false) {
   console.log(`\n=== Exporting Cleaned Filter List ===`);
   
-  // Create set of domains to remove (only dead domains, not redirects)
+  // Create set of domains to remove (dead domains + redirect domains)
   const domainsToRemove = new Set(deadDomains.map(d => d.domain.toLowerCase()));
-  console.log(`Domains to remove: ${domainsToRemove.size}`);
+  // Add redirect domains to removal set, respecting --ignore-similar
+  if (redirectDomains && redirectDomains.length > 0) {
+    let redirectsToRemove = redirectDomains;
+    
+    // If --ignore-similar was used, similar domain redirects were already filtered out
+    // So we can add all remaining redirect domains to the removal set
+    for (const redirect of redirectsToRemove) {
+      domainsToRemove.add(redirect.domain.toLowerCase());
+    }
+    
+    console.log(`Dead domains to remove: ${deadDomains.length}`);
+    console.log(`Redirect domains to remove: ${redirectsToRemove.length}`);
+    console.log(`Total domains to remove: ${domainsToRemove.size}`);
+  } else {
+    console.log(`Domains to remove: ${domainsToRemove.size} (dead only)`);
+  } 
   
   // Read input file
   const inputContent = fs.readFileSync(inputFile, 'utf8');

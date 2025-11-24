@@ -1167,7 +1167,7 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
   
   // Export cleaned list if requested
   if (EXPORT_LIST && deadDomains.length > 0) {
-    exportCleanedList(INPUT_FILE, deadDomains, redirectDomains, SCAN_TIMESTAMP);
+    exportCleanedList(INPUT_FILE, deadDomains, redirectDomains, SCAN_TIMESTAMP, IGNORE_SIMILAR);
   }  
 
   process.exit(0);
