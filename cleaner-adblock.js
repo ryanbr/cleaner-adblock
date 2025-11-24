@@ -48,6 +48,7 @@ let BLOCK_RESOURCES = false; // Default: don't block resources
 let SIMPLE_DOMAINS = false; // New option: parse as simple domain list
 let CHECK_DIG = false; // Default: don't check DNS A records
 let CHECK_DIG_ALWAYS = false; // Default: don't filter dead domains by DNS
+let EXPORT_LIST = false; // Default: don't export cleaned list
 
 // Debug options
 let DEBUG = false; // Enable debug output
@@ -74,6 +75,8 @@ for (const arg of args) {
     CHECK_DIG = true;
   } else if (arg === '--check-dig-always') {
     CHECK_DIG_ALWAYS = true;
+  } else if (arg === '--export-list') {
+    EXPORT_LIST = true;
   } else if (arg === '--debug') {
     DEBUG = true;
   } else if (arg === '--debug-verbose') {
@@ -117,6 +120,7 @@ Options:
   --simple-domains      Parse as plain domain list (one per line)
   --check-dig           Verify dead domains with DNS lookup
   --check-dig-always    Only report domains with no DNS A records
+  --export-list         Export cleaned filter list (removes dead domains)
   --debug               Enable basic debug output
   --debug-verbose       Verbose debug output
   --debug-network       Log network requests
@@ -142,6 +146,9 @@ const { execSync } = require('child_process');
 const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
+// Load export module
+const { exportCleanedList } = require('./export.js');
+
 
 // load multi-label TLD data from multi_label_suffixes.json
 let multiTLDs;
@@ -1135,5 +1142,10 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
     console.log('? No redirecting domains found');
   }
   
+  // Export cleaned list if requested
+  if (EXPORT_LIST && deadDomains.length > 0) {
+    exportCleanedList(INPUT_FILE, deadDomains, redirectDomains, SCAN_TIMESTAMP);
+  }  
+
   process.exit(0);
 })();
