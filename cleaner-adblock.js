@@ -887,6 +887,8 @@ async function processDomains(browser, domainObjects) {
 function writeDeadDomains(deadDomains, scanTimestamp, inputFile) {
   const lines = [
     `# Dead/Non-Existent Domains`,
+    `# Created with Cleaner Adblock - https://github.com/ryanbr/cleaner-adblock`,
+    `#`,
     `# These domains don't resolve and should be removed from filter lists`,
     `# Scanned file: ${inputFile}`,
     `# Generated: ${new Date().toISOString()}`,
@@ -926,6 +928,8 @@ function writeDeadDomains(deadDomains, scanTimestamp, inputFile) {
 function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
   const lines = [
     `# Redirecting Domains`,
+    `# Created with Cleaner Adblock - https://github.com/ryanbr/cleaner-adblock`,
+    `#`,
     `# These domains redirect to different domains - review for updates`,
     `# Scanned file: ${inputFile}`,
     `# Generated: ${new Date().toISOString()}`,
