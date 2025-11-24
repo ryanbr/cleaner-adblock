@@ -301,6 +301,21 @@ function parseSimpleDomains(line) {
   return validDomains;
 }
 
+// Check if a domain should be ignored (including subdomains)
+function shouldIgnoreDomain(domain) {
+  for (const ignoredDomain of IGNORED_DOMAINS) {
+    // Exact match
+    if (domain === ignoredDomain) {
+      return true;
+    }
+    // Subdomain match (e.g., consent.yahoo.com matches yahoo.com)
+    if (domain.endsWith('.' + ignoredDomain)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // Extract domains from uBlock Origin and Adguard style rule lines
 function extractDomains(line) {
   line = line.trim();
@@ -1021,7 +1036,7 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
   // Filter out ignored domains
   if (IGNORED_DOMAINS.length > 0) {
     const beforeCount = domains.length;
-    domains = domains.filter(domain => !IGNORED_DOMAINS.includes(domain));
+    domains = domains.filter(domain => !shouldIgnoreDomain(domain));
     const ignoredCount = beforeCount - domains.length;
     if (ignoredCount > 0) {
       console.log(`Ignored ${ignoredCount} domain(s) from IGNORED_DOMAINS list`);
