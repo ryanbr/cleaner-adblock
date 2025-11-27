@@ -396,9 +396,15 @@ function extractDomains(line) {
   
   // Extract domain from network rule format (||domain.com^ or ||domain.com/)
   if (line.includes('||')) {
+    // Skip wildcard TLD patterns like ||domain.* or ||domain.*^
+    if (/\|\|[a-z0-9.-]+\.\*/.test(line)) {
+      return validDomains;
+    }
     const networkMatch = line.match(/\|\|([a-z0-9.-]+)/i);
     if (networkMatch) {
-      const domain = networkMatch[1];
+      let domain = networkMatch[1];
+      // Remove trailing dots (malformed domains)
+      domain = domain.replace(/\.+$/, '');
       
       // Skip wildcards
       if (!domain.includes('*') && isValidDomain(domain)) {
