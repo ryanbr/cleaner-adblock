@@ -201,6 +201,7 @@ function isValidDomain(domain) {
   
   if (!domain.includes('.')) return false; // blocks "abc123" and "localhost"
   if (domain.includes(':')) return false; // ipv6-like (contains :)
+  if (domain.includes('*')) return false; // wildcard domains (e.g., *, .*, *.example.com)
   
   const lower = domain.toLowerCase();
   
