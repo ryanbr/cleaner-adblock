@@ -597,19 +597,21 @@ async function checkDomain(browser, domainObj, index, total) {
     let forceCloseTimer = null;
     let pageClosed = false;
 
-    const forceClosePage = async () => {
-      if (!pageClosed) {
+    const safeClosePage = async (isForceClose = false) => {
+      if (pageClosed) return;
+      pageClosed = true;
+      clearTimeout(forceCloseTimer);
+      if (isForceClose) {
         console.log(`  ? Force-closing ${variant} after ${FORCE_CLOSE_TIMEOUT / 1000}s timeout`);
-        pageClosed = true;
-        try {
-          await page.close();
-        } catch (e) {
-          // Ignore
-        }
+      }
+      try {
+        await page.close();
+      } catch (e) {
+        // Already closed, ignore
       }
     };
 
-    forceCloseTimer = setTimeout(forceClosePage, FORCE_CLOSE_TIMEOUT);
+    forceCloseTimer = setTimeout(() => safeClosePage(true), FORCE_CLOSE_TIMEOUT);
     
     let mainRequestError = null; // Track main request failure
 
@@ -700,44 +702,28 @@ async function checkDomain(browser, domainObj, index, total) {
 
       // If 403 but page actually loaded with content, treat as active (Cloudflare, auth walls, etc.)
       if (is403 && pageActuallyLoaded) {
-        clearTimeout(forceCloseTimer);
-        if (!pageClosed) {
-          pageClosed = true;
-          await page.close();
-        }
+        await safeClosePage();
         console.log(`  ✓  ${domain} - Active (HTTP 403 but content loaded)${variantLabel}`);
         return { type: null, data: null };
       }
 
       // If this is an anti-bot 403 message, treat as active (domain is working, just blocking bots)
       if (is403 && isAntiBotMessage) {
-        clearTimeout(forceCloseTimer);
-        if (!pageClosed) {
-          pageClosed = true;
-          await page.close();
-        }
+        await safeClosePage();
         console.log(`  ?  ${domain} - Active (HTTP 403 anti-bot protection detected)${variantLabel}`);
         return { type: null, data: null };
       }
 
       // If 403 and not last variant, try next variant (www might work)
       if (is403 && !isLastVariant) {
-        clearTimeout(forceCloseTimer);
-        if (!pageClosed) {
-          pageClosed = true;
-          await page.close();
-        }
+        await safeClosePage();
         console.log(`  ⚠  ${variant} - HTTP 403 Forbidden, trying next...`);
         continue; // Try next variant
       }
       
       // If truly dead and not last variant, try next variant
       if (isTrulyDead && !isLastVariant) {
-        clearTimeout(forceCloseTimer);
-        if (!pageClosed) {
-          pageClosed = true;
-          await page.close();
-        }
+        await safeClosePage();
         console.log(`  ??  ${variant} - Dead (HTTP ${statusCode || 'timeout'}), trying next...`);
         continue; // Try next variant
       }
@@ -787,12 +773,8 @@ async function checkDomain(browser, domainObj, index, total) {
         result = { type: null, data: null };
       }
       
-      clearTimeout(forceCloseTimer);
-      if (!pageClosed) {
-        pageClosed = true;
-        await page.close();
-        console.log(`  ??  Closed tab for ${variant}`);
-      }
+      await safeClosePage();
+      console.log(`  ??  Closed tab for ${variant}`);
       
       return result; // Success - return result
       
@@ -836,19 +818,8 @@ async function checkDomain(browser, domainObj, index, total) {
 
       debugVerbose(`Is dead: ${isDead}, Is last variant: ${isLastVariant}`);
       
-      clearTimeout(forceCloseTimer);
-      // Ensure page is always closed, even on errors
-      if (!pageClosed && page && !page.isClosed()) {
-        pageClosed = true;
-        try {
-          await page.close();
-          debugBrowser(`Page closed for ${variant} after error`);
-        } catch (closeError) {
-          debugBrowser(`Failed to close page for ${variant}: ${closeError.message}`);
-          // Force close if normal close fails
-          page.close().catch(() => {});
-        }
-      }
+      await safeClosePage();
+      debugBrowser(`Page closed for ${variant} after error`);
       
       // If dead and not last variant, try next variant
       if (isDead && !isLastVariant) {
