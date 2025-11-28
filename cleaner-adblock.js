@@ -607,6 +607,8 @@ async function checkDomain(browser, domainObj, index, total) {
     };
 
     forceCloseTimer = setTimeout(forceClosePage, FORCE_CLOSE_TIMEOUT);
+    
+    let mainRequestError = null; // Track main request failure
 
     try {
       const url = `https://${variant}`;
@@ -623,11 +625,20 @@ async function checkDomain(browser, domainObj, index, total) {
         page.on('request', request => {
           debugNetwork(`Request: ${request.method()} ${request.url()}`);
         });
-
-        page.on('requestfailed', request => {
-          debugNetwork(`Request failed: ${request.url()} - ${request.failure().errorText}`);
-        });
       }
+
+      // Always capture main request failures (not just in debug mode)
+      page.on('requestfailed', request => {
+        const requestUrl = request.url();
+        const isMainRequest = requestUrl === url || requestUrl === url + '/';
+        
+        if (isMainRequest) {
+          mainRequestError = request.failure().errorText;
+          debugNetwork(`Main request failed: ${requestUrl} - ${mainRequestError}`);
+        } else if (DEBUG_NETWORK) {
+          debugNetwork(`Request failed: ${requestUrl} - ${request.failure().errorText}`);
+        }
+      });
 
       // single consolidated response listener
       page.on('response', response => {
@@ -804,9 +815,22 @@ async function checkDomain(browser, domainObj, index, total) {
         error.message.includes('ERR_CONNECTION_REFUSED') ||
         error.message.includes('ERR_CONNECTION_TIMED_OUT') ||
         error.message.includes('ERR_CONNECTION_RESET') ||
-        error.message.includes('ERR_ADDRESS_UNREACHABLE')
+        error.message.includes('ERR_CONNECTION_CLOSED') ||
+        error.message.includes('ERR_ADDRESS_UNREACHABLE') ||
+        error.message.includes('Execution context was destroyed') ||
+        // Check if main request failed with a connection error
+        (mainRequestError && (
+          mainRequestError.includes('ERR_CONNECTION_CLOSED') ||
+          mainRequestError.includes('ERR_CONNECTION_REFUSED') ||
+          mainRequestError.includes('ERR_CONNECTION_RESET') ||
+          mainRequestError.includes('ERR_NAME_NOT_RESOLVED') ||
+          mainRequestError.includes('ERR_ADDRESS_UNREACHABLE')
+        ))
       );
       
+      // Use the actual network error if available, otherwise use the generic error message
+      const actualError = mainRequestError || error.message;
+
       debugVerbose(`Is dead: ${isDead}, Is last variant: ${isLastVariant}`);
       
       clearTimeout(forceCloseTimer);
@@ -825,7 +849,7 @@ async function checkDomain(browser, domainObj, index, total) {
       
       // If dead and not last variant, try next variant
       if (isDead && !isLastVariant) {
-        const reason = truncateError(error.message);
+        const reason = truncateError(actualError);
         console.log(`  ??  ${variant} - Dead (${reason}), trying next...`);
         continue; // Try next variant
       }
@@ -834,7 +858,7 @@ async function checkDomain(browser, domainObj, index, total) {
       let result = { type: null, data: null };
       
       if (isDead) {
-        const reason = truncateError(error.message);
+        const reason = truncateError(actualError);
         console.log(`  ??  ${domain} - Dead (${reason})${variantLabel}`);
                
         result = { 
@@ -842,7 +866,7 @@ async function checkDomain(browser, domainObj, index, total) {
           data: { domain, reason }
         };
       } else {
-        const reason = truncateError(error.message);
+        const reason = truncateError(actualError);
         console.log(`  ?  ${domain} - ${reason}${variantLabel}`);
       }
       
