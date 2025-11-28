@@ -44,7 +44,7 @@ let INPUT_FILE = null; // No default - user must specify input file
 let ADD_WWW = false; // Default: don't add www
 let IGNORE_SIMILAR = false; // Default: don't ignore similar domain redirects
 let IGNORE_NAV_TIMEOUT = false; // Default: don't ignore navigation timeouts
-let BLOCK_RESOURCES = false; // Default: don't block resources
+let BLOCK_RESOURCES = true; // Default: block resources for faster scans
 let SIMPLE_DOMAINS = false; // New option: parse as simple domain list
 let CHECK_DIG = false; // Default: don't check DNS A records
 let CHECK_DIG_ALWAYS = false; // Default: don't filter dead domains by DNS
@@ -67,8 +67,8 @@ for (const arg of args) {
     IGNORE_SIMILAR = true;
   } else if (arg === '--ignore-nav-timeout') {
     IGNORE_NAV_TIMEOUT = true;
-  } else if (arg === '--block-resources') {
-    BLOCK_RESOURCES = true;
+  } else if (arg === '--disable-block-resources') {
+    BLOCK_RESOURCES = false;
   } else if (arg === '--simple-domains') {
     SIMPLE_DOMAINS = true;
   } else if (arg === '--check-dig') {
@@ -116,7 +116,7 @@ Options:
   --input=<file>        Input file to scan (REQUIRED)
   --add-www             Check both bare domain and www variant
   --ignore-similar      Skip redirects to same base domain
-  --block-resources     Block images/CSS/fonts for faster scans
+  --disable-block-resources  Allow images/CSS/fonts (slower scans)
   --simple-domains      Parse as plain domain list (one per line)
   --check-dig           Verify dead domains with DNS lookup
   --check-dig-always    Only report domains with no DNS A records
@@ -1014,8 +1014,8 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
   if (ADD_WWW) {
     console.log(`--add-www enabled: Will check both domain.com and www.domain.com for bare domains`);
   }
-  if (BLOCK_RESOURCES) {
-    console.log(`--block-resources enabled: Blocking images/CSS/fonts/media for faster loading and less memory usage`);
+  if (!BLOCK_RESOURCES) {
+    console.log(`--disable-block-resources: Loading images/CSS/fonts/media (slower scans)`);
   }
   if (DEBUG) {
     console.log(`Debug mode enabled:`);
