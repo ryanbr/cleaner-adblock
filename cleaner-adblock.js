@@ -99,6 +99,9 @@ for (const arg of args) {
     const parsed = parseInt(arg.split('=')[1], 10);
     TEST_COUNT = Math.max(1, isNaN(parsed) ? 5 : parsed);
     TEST_MODE = true;
+  } else if (!arg.startsWith('-') && !INPUT_FILE) {
+    // Positional argument (not a flag) - treat as input file
+    INPUT_FILE = arg;
   }
 }
 
@@ -110,10 +113,10 @@ Minimal Domain Scanner v2.0
 Scans filter lists to find dead/redirecting domains.
 
 Usage:
-  node cleaner-adblock.js --input=<file> [options]
+  node cleaner-adblock.js <file> [options]
 
 Options:
-  --input=<file>        Input file to scan (REQUIRED)
+  --input=<file>        Input file to scan (alternative to positional arg)
   --add-www             Check both bare domain and www variant
   --ignore-similar      Skip redirects to same base domain
   --disable-block-resources  Allow images/CSS/fonts (slower scans)
@@ -1021,9 +1024,9 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
   // Check if input file is specified
   if (!INPUT_FILE) {
     console.error('? Error: No input file specified');
-    console.log('Usage: node cleaner-adblock.js --input=<file>');
-    console.log('Example: node cleaner-adblock.js --input=my_rules.txt');
-    console.log('Example: node cleaner-adblock.js --input=domains.txt --simple-domains');
+    console.log('Usage: node cleaner-adblock.js <file> [options]');
+    console.log('Example: node cleaner-adblock.js my_rules.txt');
+    console.log('Example: node cleaner-adblock.js domains.txt --simple-domains');
     console.log('\nUse --help for more information.\n');
     process.exit(1);
   }
