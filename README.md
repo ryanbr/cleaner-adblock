@@ -12,9 +12,12 @@ This tool parses adblock filter lists, checks the status of domains found in var
 ## Features
 
 - **Multiple Rule Format Support**: Handles uBlock Origin, Adguard, and network rules
+- **Simple Domain Lists**: Can also parse plain domain lists (one per line)
 - **Concurrent Processing**: Checks multiple domains simultaneously for speed
 - **Smart Domain Variants**: Optionally checks both `domain.com` and `www.domain.com`
 - **Similar Domain Filtering**: Can ignore redirects to subdomains of the same base domain
+- **DNS Verification**: Optionally verify dead domains with DNS lookups
+- **Export Cleaned Lists**: Generate filter lists with dead domains removed
 - **Comprehensive Error Handling**: Detects DNS failures, timeouts, HTTP errors
 - **Debug Modes**: Various debug levels for troubleshooting
 - **Test Mode**: Quick testing on a subset of domains
@@ -30,8 +33,8 @@ This tool parses adblock filter lists, checks the status of domains found in var
 
 ```bash
 # Clone or download the repository
-git clone <your-repo-url>
-cd <repo-directory>
+git clone git@github.com:ryanbr/cleaner-adblock.git
+cd cleaner-adblock
 
 # Install dependencies
 npm install puppeteer
@@ -42,25 +45,37 @@ npm install puppeteer
 ### Basic Usage
 
 ```bash
-node cleaner-adblock.js
+node cleaner-adblock.js <file>
 ```
 
-This will scan the default file (`easylist_specific_hide.txt`) and generate two output files.
+This will scan the specified file and generate two timestamped output files.
 
 ### Command-Line Options
 
 ```bash
-node cleaner-adblock.js [options]
+node cleaner-adblock.js <file> [options]
 ```
 
 #### Input Options
 
-- `--input=<file>` - Specify input file to scan (default: `easylist_specific_hide.txt`)
+- `--input=<file>` - Specify input file to scan (alternative to positional arg)
+- `--simple-domains` - Parse input as plain domain list (one per line) instead of filter rules
 
 #### Domain Checking Options
 
 - `--add-www` - Check both `domain.com` and `www.domain.com` for bare domains
 - `--ignore-similar` - Ignore redirects to subdomains of same base domain
+- `--check-dig` - Verify dead domains with DNS lookup
+- `--check-dig-always` - Only report domains with no DNS A records
+
+#### Output Options
+
+- `--export-list` - Export cleaned filter list (removes dead domains)
+
+#### Performance Options
+
+- `--concurrency=N` - Number of concurrent checks (1-50, default: 12)
+- `--disable-block-resources` - Allow images/CSS/fonts to load (slower scans)
 
 #### Debug Options
 
@@ -82,23 +97,38 @@ node cleaner-adblock.js [options]
 ### Examples
 
 ```bash
-# Scan custom filter list
+# Scan a filter list
+node cleaner-adblock.js my_rules.txt
+
+# Scan with input flag
 node cleaner-adblock.js --input=my_rules.txt
 
+# Scan a simple list of domains (one per line)
+node cleaner-adblock.js domains.txt --simple-domains
+
 # Check both domain.com and www.domain.com variants
-node cleaner-adblock.js --add-www
+node cleaner-adblock.js my_rules.txt --add-www
 
 # Ignore subdomain redirects (reduces noise)
-node cleaner-adblock.js --ignore-similar
+node cleaner-adblock.js my_rules.txt --ignore-similar
 
 # Combine options
-node cleaner-adblock.js --input=my_rules.txt --add-www --ignore-similar
+node cleaner-adblock.js my_rules.txt --add-www --ignore-similar
+
+# Only report domains with no DNS records
+node cleaner-adblock.js my_rules.txt --check-dig-always
+
+# Export a cleaned filter list
+node cleaner-adblock.js my_rules.txt --export-list
+
+# Increase concurrency for faster scans
+node cleaner-adblock.js my_rules.txt --concurrency=20
 
 # Debug mode for troubleshooting
-node cleaner-adblock.js --debug --test-mode
+node cleaner-adblock.js my_rules.txt --debug --test-mode
 
 # Test first 10 domains with full debugging
-node cleaner-adblock.js --debug-all --test-count=10
+node cleaner-adblock.js my_rules.txt --debug-all --test-count=10
 ```
 
 ## Supported Rule Types
@@ -132,9 +162,22 @@ domain1.com,domain2.com##selector  # Multiple domains
 
 Extracts domains from the `domain=` parameter.
 
+### Simple Domain Lists
+
+When using `--simple-domains`:
+
+```
+example.com
+another-domain.org
+# Comments are ignored
+domain1.com, domain2.com, domain3.net
+```
+
 ## Output Files
 
-### `dead_domains.txt`
+Output files are timestamped to avoid overwriting previous scans.
+
+### `dead_domains_TIMESTAMP.txt`
 
 Contains domains that should be **removed** from filter lists:
 
@@ -146,26 +189,28 @@ Contains domains that should be **removed** from filter lists:
 Format:
 ```
 # Dead/Non-Existent Domains
+# Scanned file: my_rules.txt
 # Generated: 2025-11-08T10:30:00.000Z
 # Total found: 15
 
 example-dead.com # ERR_NAME_NOT_RESOLVED
-old-site.net # 404 Not Found
-timeout-site.org # Navigation timeout
+old-site.net # HTTP 404
+timeout-site.org # Navigation timeout of 25000ms exceeded
 ```
 
-### `redirect_domains.txt`
+### `redirect_domains_TIMESTAMP.txt`
 
 Contains domains that **redirect** to different domains (review for potential rule updates):
 
 Format:
 ```
 # Redirecting Domains
+# Scanned file: my_rules.txt
 # Generated: 2025-11-08T10:30:00.000Z
 # Total found: 8
 
-old-domain.com → new-domain.com # https://new-domain.com/
-example.org → example.com # https://example.com/
+old-domain.com ? new-domain.com # https://new-domain.com/
+example.org ? example.com # https://example.com/
 ```
 
 ## How It Works
@@ -179,20 +224,36 @@ example.org → example.com # https://example.com/
    - Detect DNS failures
    - Handle HTTP errors
    - Capture timeouts
-5. **Categorize Results**: Separates dead domains from redirecting domains
-6. **Generate Reports**: Creates organized output files with explanations
+5. **DNS Verification**: Optionally verifies dead domains with dig
+6. **Categorize Results**: Separates dead domains from redirecting domains
+7. **Generate Reports**: Creates organized output files with explanations
 
 ## Configuration
 
-Default settings (can be modified in the code):
+Default settings (can be modified via command line or in the code):
 
 ```javascript
 const TIMEOUT = 25000;              // Page load timeout (25 seconds)
 const FORCE_CLOSE_TIMEOUT = 60000;  // Force-close timeout (60 seconds)
-const CONCURRENCY = 12;              // Concurrent domain checks
+const CONCURRENCY = 12;             // Concurrent domain checks (use --concurrency=N)
 ```
 
+You can also edit the `IGNORED_DOMAINS` array in the script to skip specific domains that are incorrectly flagged.
+
 ## Special Features
+
+### `--simple-domains` Behavior
+
+Parses input as a plain domain list instead of filter rules:
+- One domain per line
+- Supports comma-separated domains
+- Ignores lines starting with `#`, `!`, or `//`
+- Automatically strips protocols and paths
+
+### `--check-dig` and `--check-dig-always` Behavior
+
+- `--check-dig` - Adds DNS A record info to dead domain output
+- `--check-dig-always` - Filters dead domains to only include those with no DNS A records. Useful for confirming domains are truly dead vs temporarily unavailable.
 
 ### `--add-www` Behavior
 
@@ -209,6 +270,10 @@ Reduces noise from internal subdomain redirects:
 - `example.com` → `different.com` (flagged - different domain)
 
 Useful for sites that redirect to CDN or regional subdomains.
+
+### `--export-list` Behavior
+
+Generates a cleaned version of the original filter list with dead domains removed. The cleaned list is saved with a `_cleaned_TIMESTAMP` suffix.
 
 ## Error Handling
 
@@ -242,7 +307,7 @@ args: [
 
 ### Issue: Too many timeouts
 
-Increase the timeout value:
+Increase the timeout value in the code:
 ```javascript
 const TIMEOUT = 35000; // 35 seconds
 ```
@@ -250,15 +315,16 @@ const TIMEOUT = 35000; // 35 seconds
 ### Issue: Running out of memory
 
 Reduce concurrency:
-```javascript
-const CONCURRENCY = 6; // Lower concurrency
+```bash
+node cleaner-adblock.js my_rules.txt --concurrency=6
 ```
 
 ## Performance Tips
 
 - Use `--test-mode` first to verify everything works
-- Adjust `CONCURRENCY` based on your system resources
+- Adjust concurrency with `--concurrency=N` based on your system resources
 - Use `--ignore-similar` to reduce false positives
+- Use default resource blocking (don't use `--disable-block-resources`) for faster scans
 - Monitor system resources during large scans
 - Consider splitting very large filter lists
 
@@ -272,7 +338,7 @@ const CONCURRENCY = 6; // Lower concurrency
 
 ## License
 
-[Specify your license here]
+[GPL](https://github.com/ryanbr/cleaner-adblock/blob/main/LICENSE)
 
 ## Contributing
 
@@ -289,4 +355,4 @@ Built with [Puppeteer](https://pptr.dev/) for reliable browser automation and do
 
 ## Support
 
-For issues, questions, or suggestions, please [open an issue](your-issue-tracker-url) on GitHub.
+For issues, questions, or suggestions, please [open an issue](https://github.com/ryanbr/cleaner-adblock/issues) on GitHub.
