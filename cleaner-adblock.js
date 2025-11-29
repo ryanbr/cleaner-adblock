@@ -10,7 +10,7 @@ const args = process.argv.slice(2);
 // Configuration
 const TIMEOUT = 25000; // 25 second timeout for page loads
 const FORCE_CLOSE_TIMEOUT = 60000; // 60 second fallback to force-close any tab
-const CONCURRENCY = 12; // Number of concurrent checks
+let CONCURRENCY = 12; // Number of concurrent checks
 let DEAD_DOMAINS_FILE; // Will be set with timestamp in main()
 let REDIRECT_DOMAINS_FILE; // Will be set with timestamp in main()
 
@@ -99,6 +99,9 @@ for (const arg of args) {
     const parsed = parseInt(arg.split('=')[1], 10);
     TEST_COUNT = Math.max(1, isNaN(parsed) ? 5 : parsed);
     TEST_MODE = true;
+  } else if (arg.startsWith('--concurrency=')) {
+    const parsed = parseInt(arg.split('=')[1], 10);
+    CONCURRENCY = Math.max(1, Math.min(50, isNaN(parsed) ? 12 : parsed));
   } else if (!arg.startsWith('-') && !INPUT_FILE) {
     // Positional argument (not a flag) - treat as input file
     INPUT_FILE = arg;
@@ -129,6 +132,7 @@ Options:
   --debug-network       Log network requests
   --debug-browser       Log browser events
   --debug-all           Enable all debug options
+  --concurrency=N       Number of concurrent checks (1-50, default: 12)
   --test-mode           Test first 5 domains only
   --test-count=N        Test first N domains
   -h, --help            Show this help
