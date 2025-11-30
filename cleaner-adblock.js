@@ -30,10 +30,14 @@ const IGNORED_DOMAINS = [
   'demap.info',
   'medievalists.net',
   'moviesfoundonline.com',
-  'g.doubleclick.net',
+  'doubleclick.net',
   'downloads.codefi.re',
   'cdn.ampproject.org',
   'timesofindia.com',
+  'aainflight.com',
+  'flyfi.com',
+  'tweakers.net',
+  'gouv.fr',
   'yahoo.com'
 ];
 
