@@ -612,9 +612,9 @@ async function checkDomain(browser, domainObj, index, total) {
       await page.setRequestInterception(true);
       page.on('request', (request) => {
         if (['image', 'stylesheet', 'font', 'media'].includes(request.resourceType())) {
-          request.abort();
+          request.abort().catch(() => {});
         } else {
-          request.continue();
+          request.continue().catch(() => {});
         }
       });
       debugBrowser(`Resource blocking enabled for ${variant}`);
