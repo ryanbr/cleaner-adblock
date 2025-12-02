@@ -61,6 +61,7 @@ let DEBUG_NETWORK = false; // Log network events
 let DEBUG_BROWSER = false; // Log browser events
 let TEST_MODE = false; // Only test first N domains
 let TEST_COUNT = 5; // Number of domains to test in test mode
+let QUICK_DISCONNECT = false; // Disconnect as soon as result is determined
 
 for (const arg of args) {
   if (arg.startsWith('--input=')) {
@@ -106,6 +107,8 @@ for (const arg of args) {
   } else if (arg.startsWith('--concurrency=')) {
     const parsed = parseInt(arg.split('=')[1], 10);
     CONCURRENCY = Math.max(1, Math.min(50, isNaN(parsed) ? 12 : parsed));
+  } else if (arg === '--quick-disconnect') {
+    QUICK_DISCONNECT = true;
   } else if (!arg.startsWith('-') && !INPUT_FILE) {
     // Positional argument (not a flag) - treat as input file
     INPUT_FILE = arg;
@@ -137,6 +140,7 @@ Options:
   --debug-browser       Log browser events
   --debug-all           Enable all debug options
   --concurrency=N       Number of concurrent checks (1-50, default: 12)
+  --quick-disconnect    Disconnect once status is determined (faster scans)
   --test-mode           Test first 5 domains only
   --test-count=N        Test first N domains
   -h, --help            Show this help
@@ -639,6 +643,13 @@ async function checkDomain(browser, domainObj, index, total) {
     };
 
     forceCloseTimer = setTimeout(() => safeClosePage(true), FORCE_CLOSE_TIMEOUT);
+
+    // Quick disconnect: stop loading once we know the result
+    const quickDisconnect = () => {
+      if (!QUICK_DISCONNECT || pageClosed) return;
+      page.evaluate(() => window.stop()).catch(() => {});
+      debugVerbose(`Quick disconnect triggered for ${variant}`);
+    };
     
     let mainRequestError = null; // Track main request failure
 
@@ -673,6 +684,7 @@ async function checkDomain(browser, domainObj, index, total) {
       });
 
       // single consolidated response listener
+      const variantDomain = variant.replace(/^www\./, '');
       page.on('response', response => {
         const responseUrl = response.url();
         const isMainResponse = responseUrl === url || responseUrl === url + '/';
@@ -680,6 +692,19 @@ async function checkDomain(browser, domainObj, index, total) {
         if (isMainResponse) {
           statusCode = response.status();
           debugNetwork(`Main response received: ${statusCode} for ${responseUrl}`);
+          // Quick disconnect on 2xx/3xx - we have enough info
+          if (QUICK_DISCONNECT && statusCode >= 200 && statusCode < 400) {
+            quickDisconnect();
+          }
+        } else if (QUICK_DISCONNECT && !pageClosed) {
+          // Check for redirect to different domain
+          try {
+            const responseDomain = new URL(responseUrl).hostname.replace(/^www\./, '');
+            if (responseDomain !== variantDomain && response.status() >= 200 && response.status() < 400) {
+              debugVerbose(`Redirect detected to ${responseDomain}, quick disconnecting`);
+              quickDisconnect();
+            }
+          } catch (e) { /* Invalid URL, ignore */ }
         } else if (DEBUG_NETWORK) {
           debugNetwork(`Response: ${response.status()} ${responseUrl}`);
         }
