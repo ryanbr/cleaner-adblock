@@ -429,6 +429,24 @@ function extractDomains(line) {
     return validDomains;
   }
   
+  // Extract domains from attribute selectors containing URLs
+  // Matches: ##[href^="https://..."], ##[onclick^="...='https://..."], ##[data-url*="https://..."], etc.
+  // Captures domain from any attribute with ^=, =, or *= containing an https:// or http:// URL
+  // Excludes $= (ends with) as those typically match paths/filenames, not domains
+  const urlMatches = line.matchAll(/\[[a-z-]+[\^*]?=["'][^"']*https?:\/\/([a-z0-9.-]+)/gi);
+  for (const match of urlMatches) {
+    let domain = match[1].toLowerCase();
+    // Remove leading dots (e.g., .domain.com -> domain.com)
+    domain = domain.replace(/^\.+/, '');
+    // Skip if it looks like a file rather than a domain
+    if (/\.(php|js|jpg|jpeg|png|gif|webp|svg|css|txt|html|htm)$/i.test(domain)) {
+      continue;
+    }
+    if (isValidDomain(domain)) {
+      validDomains.push(domain);
+    }
+  }
+  
   // Check for uBlock Origin element hiding/cosmetic rules (##, #@#, etc.)
   const match = line.match(/^([^#\s]+?)(?:##(?:\+js\()?|#@#|##\^)/);
   if (!match) return validDomains; // Return empty or domains from network rules
