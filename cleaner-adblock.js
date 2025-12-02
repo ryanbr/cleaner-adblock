@@ -609,9 +609,10 @@ async function checkDomain(browser, domainObj, index, total) {
 
     // Block unnecessary resources if flag is enabled
     if (BLOCK_RESOURCES) {
+      const blockedTypes = new Set(['image', 'stylesheet', 'font', 'media']);
       await page.setRequestInterception(true);
       page.on('request', (request) => {
-        if (['image', 'stylesheet', 'font', 'media'].includes(request.resourceType())) {
+        if (blockedTypes.has(request.resourceType())) {
           request.abort().catch(() => {});
         } else {
           request.continue().catch(() => {});
