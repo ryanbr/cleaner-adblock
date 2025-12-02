@@ -702,51 +702,53 @@ async function checkDomain(browser, domainObj, index, total) {
         statusCode = response.status();
       }
 
-      // Check if page actually loaded with content
-      // Even if status is 403, if page loaded content it's likely alive (Cloudflare, auth, etc.)
-      const pageContent = await page.content();
-      const hasContent = pageContent.length > 500; // Reasonable threshold for actual content
-      const notErrorPage = !finalUrl.includes('about:blank');
-      const pageActuallyLoaded = hasContent && notErrorPage;
-      
-      debugVerbose(`Page content length: ${pageContent.length} bytes`);
-      debugVerbose(`Has content: ${hasContent}, Not error page: ${notErrorPage}`);
-
-      // Check if this is an anti-bot 403 message that should be ignored
-      const isAntiBotMessage = pageContent.includes('Access Denied') && 
-        (pageContent.includes("You don't have permission to access") ||
-         pageContent.includes('Reference #') ||
-         pageContent.includes('errors.edgesuite.net') ||
-         finalUrl.includes('errors.edgesuite.net'));
-      
-      debugVerbose(`Anti-bot 403 detection: ${isAntiBotMessage}`);
-
       // Check if dead
       // 403 is special - it means server is up but denying access
       // Don't treat 403 as dead if we have www variant to try OR if it's an anti-bot message
       const is403 = statusCode === 403;
       const isTrulyDead = (statusCode >= 400 && statusCode !== 403) || statusCode === null;
 
-      // If 403 but page actually loaded with content, treat as active (Cloudflare, auth walls, etc.)
-      if (is403 && pageActuallyLoaded) {
-        await safeClosePage();
-        console.log(`  ✓  ${domain} - Active (HTTP 403 but content loaded)${variantLabel}`);
-        return { type: null, data: null };
+      // Only fetch page content for 403 responses (saves ~50-100ms per request)
+      if (is403) {
+        const pageContent = await page.content();
+        const hasContent = pageContent.length > 500;
+        const notErrorPage = !finalUrl.includes('about:blank');
+        const pageActuallyLoaded = hasContent && notErrorPage;
+        
+        debugVerbose(`Page content length: ${pageContent.length} bytes`);
+        debugVerbose(`Has content: ${hasContent}, Not error page: ${notErrorPage}`);
+
+        // Check if this is an anti-bot 403 message
+        const isAntiBotMessage = pageContent.includes('Access Denied') && 
+          (pageContent.includes("You don't have permission to access") ||
+           pageContent.includes('Reference #') ||
+           pageContent.includes('errors.edgesuite.net') ||
+           finalUrl.includes('errors.edgesuite.net'));
+        
+        debugVerbose(`Anti-bot 403 detection: ${isAntiBotMessage}`);
+
+        // If 403 but page actually loaded with content, treat as active
+        if (pageActuallyLoaded) {
+          await safeClosePage();
+          console.log(`  ?  ${domain} - Active (HTTP 403 but content loaded)${variantLabel}`);
+          return { type: null, data: null };
+        }
+
+        // If anti-bot 403 message, treat as active
+        if (isAntiBotMessage) {
+          await safeClosePage();
+          console.log(`  ??  ${domain} - Active (HTTP 403 anti-bot protection detected)${variantLabel}`);
+          return { type: null, data: null };
+        }
+
+        // If not last variant, try next
+        if (!isLastVariant) {
+          await safeClosePage();
+          console.log(`  ?  ${variant} - HTTP 403 Forbidden, trying next...`);
+          continue;
+        }
       }
 
-      // If this is an anti-bot 403 message, treat as active (domain is working, just blocking bots)
-      if (is403 && isAntiBotMessage) {
-        await safeClosePage();
-        console.log(`  ?  ${domain} - Active (HTTP 403 anti-bot protection detected)${variantLabel}`);
-        return { type: null, data: null };
-      }
-
-      // If 403 and not last variant, try next variant (www might work)
-      if (is403 && !isLastVariant) {
-        await safeClosePage();
-        console.log(`  ⚠  ${variant} - HTTP 403 Forbidden, trying next...`);
-        continue; // Try next variant
-      }
       
       // If truly dead and not last variant, try next variant
       if (isTrulyDead && !isLastVariant) {
