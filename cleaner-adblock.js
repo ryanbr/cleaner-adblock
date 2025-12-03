@@ -53,6 +53,7 @@ let SIMPLE_DOMAINS = false; // New option: parse as simple domain list
 let CHECK_DIG = false; // Default: don't check DNS A records
 let CHECK_DIG_ALWAYS = false; // Default: don't filter dead domains by DNS
 let EXPORT_LIST = false; // Default: don't export cleaned list
+let LOCALHOST_LIST = false; // Parse hosts file format (0.0.0.0/127.0.0.1 domain)
 
 // Debug options
 let DEBUG = false; // Enable debug output
@@ -84,6 +85,8 @@ for (const arg of args) {
     EXPORT_LIST = true;
   } else if (arg === '--debug') {
     DEBUG = true;
+  } else if (arg === '--localhost') {
+    LOCALHOST_LIST = true;
   } else if (arg === '--debug-verbose') {
     DEBUG = true;
     DEBUG_VERBOSE = true;
@@ -134,6 +137,7 @@ Options:
   --check-dig           Verify dead domains with DNS lookup
   --check-dig-always    Only report domains with no DNS A records
   --export-list         Export cleaned filter list (removes dead domains)
+  --localhost           Parse hosts file format (0.0.0.0/127.0.0.1 domain)
   --debug               Enable basic debug output
   --debug-verbose       Verbose debug output
   --debug-network       Log network requests
@@ -317,6 +321,35 @@ function parseSimpleDomains(line) {
   return validDomains;
 }
 
+// Parse hosts file format (0.0.0.0 domain.com or 127.0.0.1 domain.com)
+function parseLocalhostLine(line) {
+  line = line.trim();
+  
+  // Skip empty lines and comments
+  if (!line || line.startsWith('#') || line.startsWith('!')) {
+    return [];
+  }
+  
+  // Match: 0.0.0.0 domain.com or 127.0.0.1 domain.com (with optional trailing comment)
+  const match = line.match(/^(?:0\.0\.0\.0|127\.0\.0\.1)\s+([a-z0-9.-]+)/i);
+  if (!match) {
+    return [];
+  }
+  
+  let domain = match[1].toLowerCase();
+  
+  // Skip localhost entries
+  if (domain === 'localhost' || domain === 'localhost.localdomain') {
+    return [];
+  }
+  
+  if (isValidDomain(domain)) {
+    return [domain];
+  }
+  
+  return [];
+}
+
 // Check if a domain should be ignored (including subdomains)
 function shouldIgnoreDomain(domain) {
   for (const ignoredDomain of IGNORED_DOMAINS) {
@@ -492,8 +525,12 @@ function parseDomainsFromFile(filePath) {
   for (const line of lines) {
     let extractedDomains;
     
+    // Use localhost parsing if --localhost flag is set
+    if (LOCALHOST_LIST) {
+      extractedDomains = parseLocalhostLine(line);
+    }
     // Use simple domain parsing if --simple-domains flag is set
-    if (SIMPLE_DOMAINS) {
+    else if (SIMPLE_DOMAINS) {
       extractedDomains = parseSimpleDomains(line);
     } else {
       extractedDomains = extractDomains(line);
