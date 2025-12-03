@@ -2,6 +2,8 @@
 
 A Node.js tool that scans adblock filter lists to identify dead domains and redirecting domains, helping maintain clean and efficient filter lists.
 
+<img width="1129" height="476" alt="clean33" src="https://github.com/user-attachments/assets/d1daa62a-af1b-489b-b89f-d3b2d76c5e21" />
+
 ## Overview
 
 This tool parses adblock filter lists, checks the status of domains found in various rule types, and categorizes them into:
