@@ -138,6 +138,7 @@ Options:
   --check-dig-always    Only report domains with no DNS A records
   --export-list         Export cleaned filter list (removes dead domains)
   --localhost           Parse hosts file format (0.0.0.0/127.0.0.1 domain)
+  --color, --colour     Enable colored output
   --debug               Enable basic debug output
   --debug-verbose       Verbose debug output
   --debug-network       Log network requests
@@ -168,8 +169,9 @@ const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
 // Load export module
-const { exportCleanedList } = require('./export.js');
-
+const { exportCleanedList } = require('./lib/export.js');
+// Load color module
+const { tags, isColorEnabled } = require('./lib/colorize.js');
 
 // load multi-label TLD data from multi_label_suffixes.json
 let multiTLDs;
@@ -670,7 +672,7 @@ async function checkDomain(browser, domainObj, index, total) {
       pageClosed = true;
       clearTimeout(forceCloseTimer);
       if (isForceClose) {
-        console.log(`  [TIMEOUT] Force-closing ${variant} after ${FORCE_CLOSE_TIMEOUT / 1000}s`);
+        console.log(`  ${tags.timeout} Force-closing ${variant} after ${FORCE_CLOSE_TIMEOUT / 1000}s`);
       }
       try {
         await page.close();
@@ -695,7 +697,7 @@ async function checkDomain(browser, domainObj, index, total) {
       if (i === 0) {
         console.log(`[${index + 1}/${total}] Checking ${domain}...${ADD_WWW && variants.length > 1 ? ' (with www fallback)' : ''}`);
       } else {
-        console.log(`  [RETRY] Trying www.${domain}...`);
+        console.log(`  ${tags.retry} Trying www.${domain}...`);
       }
 
       let statusCode = null;
@@ -792,21 +794,21 @@ async function checkDomain(browser, domainObj, index, total) {
         // If 403 but page actually loaded with content, treat as active
         if (pageActuallyLoaded) {
           await safeClosePage();
-          console.log(`  [OK] ${domain} - Active (HTTP 403 but content loaded)${variantLabel}`);
+          console.log(`  ${tags.ok} ${domain} - Active (HTTP 403 but content loaded)${variantLabel}`);
           return { type: null, data: null };
         }
 
         // If anti-bot 403 message, treat as active
         if (isAntiBotMessage) {
           await safeClosePage();
-          console.log(`  [OK] ${domain} - Active (HTTP 403 anti-bot protection)${variantLabel}`);
+          console.log(`  ${tags.ok} ${domain} - Active (HTTP 403 anti-bot protection)${variantLabel}`);
           return { type: null, data: null };
         }
 
         // If not last variant, try next
         if (!isLastVariant) {
           await safeClosePage();
-          console.log(`  [403] ${variant} - Forbidden, trying next...`);
+          console.log(`  ${tags['403']} ${variant} - Forbidden, trying next...`);
           continue;
         }
       }
@@ -815,7 +817,7 @@ async function checkDomain(browser, domainObj, index, total) {
       // If truly dead and not last variant, try next variant
       if (isTrulyDead && !isLastVariant) {
         await safeClosePage();
-        console.log(`  [DEAD] ${variant} - HTTP ${statusCode || 'timeout'}, trying next...`);
+        console.log(`  ${tags.dead} ${variant} - HTTP ${statusCode || 'timeout'}, trying next...`);
         continue; // Try next variant
       }
       
@@ -842,14 +844,14 @@ async function checkDomain(browser, domainObj, index, total) {
       
       if (isDead) {
         const reason = `HTTP ${statusCode || 'timeout/unreachable'}`;
-        console.log(`  [DEAD] ${domain} - ${reason}${variantLabel}`);
+        console.log(`  ${tags.dead} ${domain} - ${reason}${variantLabel}`);
         result = { 
           type: 'dead', 
           data: { domain, statusCode, reason }
         };
       } else if (isRedirecting && !isSimilarRedirect) {
         // Only flag as redirect if NOT similar domain
-        console.log(`  [REDIRECT] ${domain} -> ${finalDomain}${variantLabel}`);
+        console.log(`  ${tags.redirect} ${domain} -> ${finalDomain}${variantLabel}`);
         result = { 
           type: 'redirect', 
           data: { domain, finalDomain, originalUrl: url, finalUrl, statusCode }
@@ -857,9 +859,9 @@ async function checkDomain(browser, domainObj, index, total) {
       } else {
         // Active or similar domain redirect (treated as active)
         if (isSimilarRedirect) {
-          console.log(`  [OK] ${domain} - Active (similar redirect: ${finalDomain})${variantLabel}`);
+          console.log(`  ${tags.ok} ${domain} - Active (similar redirect: ${finalDomain})${variantLabel}`);
         } else {
-          console.log(`  [OK] ${domain} - Active (HTTP ${statusCode})${variantLabel}`);
+          console.log(`  ${tags.ok} ${domain} - Active (HTTP ${statusCode})${variantLabel}`);
         }
         result = { type: null, data: null };
       }
@@ -914,7 +916,7 @@ async function checkDomain(browser, domainObj, index, total) {
       // If dead and not last variant, try next variant
       if (isDead && !isLastVariant) {
         const reason = truncateError(actualError);
-        console.log(`  [DEAD] ${variant} - ${reason}, trying next...`);
+        console.log(`  ${tags.dead} ${variant} - ${reason}, trying next...`);
         continue; // Try next variant
       }
       
@@ -923,7 +925,7 @@ async function checkDomain(browser, domainObj, index, total) {
       
       if (isDead) {
         const reason = truncateError(actualError);
-        console.log(`  [DEAD] ${domain} - ${reason}${variantLabel}`);
+        console.log(`  ${tags.dead} ${domain} - ${reason}${variantLabel}`);
                
         result = { 
           type: 'dead', 
@@ -931,7 +933,7 @@ async function checkDomain(browser, domainObj, index, total) {
         };
       } else {
         const reason = truncateError(actualError);
-        console.log(`  [WARN] ${domain} - ${reason}${variantLabel}`);
+        console.log(`  ${tags.warn} ${domain} - ${reason}${variantLabel}`);
       }
 
       return result;
@@ -974,7 +976,7 @@ async function processDomains(browser, domainObjects) {
     debugBrowser(`After batch ${batchNumber}: ${openPages} pages open`);
     
     if (openPages > 1) {
-      console.log(`  [CLEANUP] Found ${openPages - 1} lingering pages, closing...`);
+      console.log(`  ${tags.cleanup} Found ${openPages - 1} lingering pages, closing...`);
       for (const page of pages) {
         if (page.url() !== 'about:blank') {
           try {
@@ -1028,7 +1030,7 @@ function writeDeadDomains(deadDomains, scanTimestamp, inputFile) {
 
   try {
     fs.writeFileSync(DEAD_DOMAINS_FILE, lines.join('\n'), 'utf8');
-    console.log(`\n[SAVED] Dead domains written to ${DEAD_DOMAINS_FILE}`);
+    console.log(`\n${tags.saved} Dead domains written to ${DEAD_DOMAINS_FILE}`);
   } catch (error) {
     console.error(`\n✗ Error writing to ${DEAD_DOMAINS_FILE}: ${error.message}`);
     process.exit(1);
@@ -1058,7 +1060,7 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
 
   try {
     fs.writeFileSync(REDIRECT_DOMAINS_FILE, lines.join('\n'), 'utf8');
-    console.log(`[SAVED] Redirect domains written to ${REDIRECT_DOMAINS_FILE}`);
+    console.log(`${tags.saved} Redirect domains written to ${REDIRECT_DOMAINS_FILE}`);
   } catch (error) {
     console.error(`\n[ERROR] Error writing to ${REDIRECT_DOMAINS_FILE}: ${error.message}`);
     process.exit(1);
@@ -1202,7 +1204,7 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
     const domainsToCheck = deadDomains.filter(item => 
       !item.statusCode || item.reason.includes('ERR_') || item.reason.includes('timeout')
     );
-    console.log(`\n[DNS] Running checks on ${domainsToCheck.length} dead domains...`);
+    console.log(`\n${tags.dns} Running checks on ${domainsToCheck.length} dead domains...`);
     
     const dnsChecks = await Promise.all(
       domainsToCheck.map(async (item) => {
@@ -1228,7 +1230,7 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
       const removedCount = beforeCount - filteredDomains.length;
       
       if (removedCount > 0) {
-        console.log(`[DNS] Filtered out ${removedCount} domain(s) with valid A records`);
+        console.log(`${tags.dns} Filtered out ${removedCount} domain(s) with valid A records`);
       }
       
       // Replace deadDomains array
@@ -1236,7 +1238,7 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
       deadDomains.push(...filteredDomains);
    }
     
-    console.log(`[DNS] Checks completed\n`);
+    console.log(`${tags.dns} Checks completed\n`);
   }
 
   console.log(`\n=== Summary ===`);
@@ -1247,16 +1249,16 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
   
   if (deadDomains.length > 0) {
     writeDeadDomains(deadDomains, SCAN_TIMESTAMP, INPUT_FILE);
-    console.log(`\n[TIP] Remove these ${deadDomains.length} dead domains from your filter list`);
+    console.log(`\n${tags.tip} Remove these ${deadDomains.length} dead domains from your filter list`);
   } else {
-    console.log('\n[OK] No dead domains found');
+    console.log(`\n${tags.ok} No dead domains found`);
   }
   
   if (redirectDomains.length > 0) {
     writeRedirectDomains(redirectDomains, SCAN_TIMESTAMP, INPUT_FILE);
-    console.log(`\n[TIP] Review these ${redirectDomains.length} redirecting domains - they may need rule updates`);
+    console.log(`\n${tags.tip} Review these ${redirectDomains.length} redirecting domains - they may need rule updates`);
   } else {
-    console.log('[OK] No redirecting domains found');
+    console.log(`${tags.ok} No redirecting domains found`);
   }
   
   // Export cleaned list if requested
