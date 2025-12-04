@@ -510,16 +510,8 @@ function parseDomainsFromFile(filePath) {
   return Array.from(domains).sort();
 }
 
-// Check if domain is a bare domain (no subdomain)
-function isBareDomain(domain) {
-  // Remove www. for checking
-  const withoutWww = domain.replace(/^www\./, '');
-  // Count dots - bare domains have exactly one dot (e.g., example.com)
-  const dotCount = (withoutWww.match(/\./g) || []).length;
-  return dotCount === 1;
-}
-
-// Expand domains with www variants if --add-www is enabled
+// Expand domains with www and base domain variants if --add-www is enabled
+// For subdomains, also checks the base domain and www.baseDomain
 function expandDomainsWithWww(domains) {
   if (!ADD_WWW) {
     return domains.map(d => ({ original: d, variants: [d] }));
@@ -531,15 +523,21 @@ function expandDomainsWithWww(domains) {
       return { original: domain, variants: [domain] };
     }
     
-    // If domain has subdomain (e.g., sub.example.com), don't add www
-    if (!isBareDomain(domain)) {
-      return { original: domain, variants: [domain] };
+    const baseDomain = getBaseDomain(domain);
+    
+    // If this is already a bare domain (same as base domain)
+    if (domain === baseDomain) {
+      // Bare domain without www - check both variants
+      return { 
+        original: domain, 
+        variants: [domain, `www.${domain}`]
+      };
     }
     
-    // Bare domain without www - check both variants
+    // Subdomain - check original, base domain, and www.baseDomain
     return { 
       original: domain, 
-      variants: [domain, `www.${domain}`]
+      variants: [domain, baseDomain, `www.${baseDomain}`]
     };
   });
 }
