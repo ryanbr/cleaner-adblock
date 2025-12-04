@@ -860,6 +860,7 @@ async function checkDomain(browser, domainObj, index, total) {
         error.message.includes('ERR_CONNECTION_RESET') ||
         error.message.includes('ERR_CONNECTION_CLOSED') ||
         error.message.includes('ERR_ADDRESS_UNREACHABLE') ||
+        error.message.includes('ERR_BLOCKED_BY_CLIENT') ||
         error.message.includes('Execution context was destroyed') ||
         // Check if main request failed with a connection error
         (mainRequestError && (
@@ -867,7 +868,8 @@ async function checkDomain(browser, domainObj, index, total) {
           mainRequestError.includes('ERR_CONNECTION_REFUSED') ||
           mainRequestError.includes('ERR_CONNECTION_RESET') ||
           mainRequestError.includes('ERR_NAME_NOT_RESOLVED') ||
-          mainRequestError.includes('ERR_ADDRESS_UNREACHABLE')
+          mainRequestError.includes('ERR_ADDRESS_UNREACHABLE') ||
+          mainRequestError.includes('ERR_BLOCKED_BY_CLIENT')
         ))
       );
       
