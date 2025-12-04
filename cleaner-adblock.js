@@ -172,20 +172,9 @@ const path = require('path');
 const { exportCleanedList } = require('./lib/export.js');
 // Load color module
 const { tags, isColorEnabled } = require('./lib/colorize.js');
+// Load domain utilities
+const { getBaseDomain, isSimilarDomain, multiTLDs } = require('./lib/domain-utils.js');
 
-// load multi-label TLD data from multi_label_suffixes.json
-let multiTLDs;
-try {
-  const tldData = JSON.parse(
-    fs.readFileSync(path.join(__dirname, "multi_label_suffixes.json"), "utf8")
-  );
-  multiTLDs = new Set(tldData.multi_label_suffixes || []);
-} catch (error) {
-  console.error(`Warning: Could not load multi-label TLD data: ${error.message}`);
-  console.error('Using fallback set of common multi-label TLDs');
-  // Fallback to common multi-label TLDs
-  multiTLDs = new Set(['co.uk', 'com.nz', 'com.au', 'co.za', 'com.br']);
-}
 
 const ipv4Pattern = /^(\d{1,3}\.){3}\d{1,3}$/;
 const domainCharPattern = /^[a-z0-9.-]+$/;
@@ -245,46 +234,13 @@ function truncateError(message, maxLength = 120) {
   return msg.substring(0, safeMaxLength - 3) + '...';
 }
 
-// Extract base domain (handles subdomains and multi-label TLDs)
-function getBaseDomain(domain) {
-  // Remove www. prefix
-  domain = domain.replace(/^www\./, '');
-
-  // Split by dots
-  const parts = domain.split('.');
-
-  // For domains like example.com, return as-is
-  if (parts.length <= 2) {
-    return domain;
-  }
-
-  // Check for multi-label TLDs (check from longest to shortest)
-  // Support up to 3-part TLDs (most are 2-part like co.uk)
-  for (let tldParts = 3; tldParts >= 2; tldParts--) {
-    if (parts.length > tldParts) {
-      const suffix = parts.slice(-tldParts).join('.');
-      if (multiTLDs.has(suffix)) {
-        // Return domain name + TLD (e.g., example.co.uk)
-        return parts.slice(-(tldParts + 1)).join('.');
-      }
-    }
-  }
-
-  // Standard TLD (e.g., .com, .org) - return last 2 parts
-  return parts.slice(-2).join('.');
-}
-
 // Check if redirect is to subdomain of same base domain
 function isSimilarDomainRedirect(originalDomain, finalDomain) {
   if (!IGNORE_SIMILAR) {
     return false; // Feature disabled
   }
   
-  const originalBase = getBaseDomain(originalDomain);
-  const finalBase = getBaseDomain(finalDomain);
-  
-  // Same base domain = similar redirect
-  return originalBase === finalBase;
+  return isSimilarDomain(originalDomain, finalDomain);
 }
 
 // Parse simple domain list format
@@ -1263,7 +1219,7 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
   
   // Export cleaned list if requested
   if (EXPORT_LIST && deadDomains.length > 0) {
-    const exportedFile = exportCleanedList(INPUT_FILE, deadDomains, redirectDomains);
+    const exportedFile = exportCleanedList(INPUT_FILE, deadDomains, redirectDomains, IGNORE_SIMILAR);
     if (exportedFile === null) {
       console.error(`${tags.error || '[ERROR]'} Failed to export cleaned filter list`);
     }
