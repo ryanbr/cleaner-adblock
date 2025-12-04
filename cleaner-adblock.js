@@ -24,6 +24,9 @@ const IGNORED_DOMAINS = [
   'aliexpress.us',
   'akamaized.net',
   'cloudfront.net',
+  'fastly.net',
+  'fwmrm.net',
+  'ntv.io',
   'golfdigest.com',
   'm.economictimes.com',
   'twitter.com',
@@ -44,6 +47,7 @@ const IGNORED_DOMAINS = [
   'aainflight.com',
   'flyfi.com',
   'tinypass.com',
+  'wixstatic.com',
   'tweakers.net',
   'gouv.fr',
   'yahoo.com'
