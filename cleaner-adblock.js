@@ -66,6 +66,7 @@ let CHECK_DIG = false; // Default: don't check DNS A records
 let CHECK_DIG_ALWAYS = false; // Default: don't filter dead domains by DNS
 let EXPORT_LIST = false; // Default: don't export cleaned list
 let LOCALHOST_LIST = false; // Parse hosts file format (0.0.0.0/127.0.0.1 domain)
+let REMOVE_REDIRECTS = false; // Default: don't force remove redirects
 
 // Debug options
 let DEBUG = false; // Enable debug output
@@ -95,6 +96,8 @@ for (const arg of args) {
     CHECK_DIG_ALWAYS = true;
   } else if (arg === '--export-list') {
     EXPORT_LIST = true;
+  } else if (arg === '--remove-redirects') {
+    REMOVE_REDIRECTS = true;
   } else if (arg === '--debug') {
     DEBUG = true;
   } else if (arg === '--localhost') {
@@ -149,6 +152,7 @@ Options:
   --check-dig           Verify dead domains with DNS lookup
   --check-dig-always    Only report domains with no DNS A records
   --export-list         Export cleaned filter list (removes dead domains)
+  --remove-redirects    Always remove redirected domains (ignores DNS checks)
   --localhost           Parse hosts file format (0.0.0.0/127.0.0.1 domain)
   --color, --colour     Enable colored output
   --debug               Enable basic debug output
@@ -1071,6 +1075,9 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
   if (ADD_WWW) {
     console.log(`--add-www enabled: Will check both domain.com and www.domain.com for bare domains`);
   }
+  if (REMOVE_REDIRECTS) {
+    console.log(`--remove-redirects enabled: Redirected domains will always be removed`);
+  }
   if (!BLOCK_RESOURCES) {
     console.log(`--disable-block-resources: Loading images/CSS/fonts/media (slower scans)`);
   }
@@ -1231,7 +1238,7 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
   
   // Export cleaned list if requested
   if (EXPORT_LIST && deadDomains.length > 0) {
-    const exportedFile = exportCleanedList(INPUT_FILE, deadDomains, redirectDomains, IGNORE_SIMILAR);
+    const exportedFile = exportCleanedList(INPUT_FILE, deadDomains, redirectDomains, IGNORE_SIMILAR, REMOVE_REDIRECTS);
     if (exportedFile === null) {
       console.error(`${tags.error || '[ERROR]'} Failed to export cleaned filter list`);
     }
