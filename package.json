@@ -4,7 +4,7 @@
   "description": "A minimal domain scanner for ad-blocking filter lists. Finds dead domains and redirecting domains using headless browser automation.",
   "main": "cleaner-adblock.js",
   "bin": {
-    "cleaner-adblock": "./cleaner-adblock.js"
+    "cleaner-adblock": "cleaner-adblock.js"
   },
   "scripts": {
     "start": "node cleaner-adblock.js",
