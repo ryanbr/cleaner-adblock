@@ -651,8 +651,8 @@ async function parallelDNSCheck(domain, type) {
     noerrorCount,
     totalServers: DNS_SERVERS.length,
     records: allRecords,
-    // Consider NXDOMAIN if majority agree
-    isNxdomain: nxdomainCount > DNS_SERVERS.length / 2,
+    // Consider NXDOMAIN only if ALL servers agree
+    isNxdomain: nxdomainCount === DNS_SERVERS.length,
     results
   };
 }
@@ -671,7 +671,7 @@ async function checkDNSRecord(domain) {
         parallelDNSCheck(variant, 'AAAA')
       ]);
       
-      // If both A and AAAA return NXDOMAIN from majority of servers
+      // If both A and AAAA return NXDOMAIN from ALL servers
       if (aCheck.isNxdomain && aaaaCheck.isNxdomain) {
         debugVerbose(`${variant}: NXDOMAIN confirmed (A: ${aCheck.nxdomainCount}/${aCheck.totalServers}, AAAA: ${aaaaCheck.nxdomainCount}/${aaaaCheck.totalServers})`);
         continue; // Try next variant
