@@ -50,7 +50,8 @@ const IGNORED_DOMAINS = [
   'wixstatic.com',
   'tweakers.net',
   'gouv.fr',
-  'yahoo.com'
+  'yahoo.com',
+  'zoom.us'
 ];
 
 // Custom User Agent - Chrome on Windows
