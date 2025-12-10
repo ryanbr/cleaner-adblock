@@ -551,6 +551,111 @@ function expandDomainsWithWww(domains) {
 }
 
 // Check DNS A record for domain using dig
+// DNS Configuration
+const DNS_SERVERS = ['8.8.8.8', '1.1.1.1', '9.9.9.9'];
+const DNS_TIMEOUT = 5000;
+const DNS_RETRIES = 2;
+
+// Execute dig with retry logic
+async function digWithRetry(cmd, retries = DNS_RETRIES) {
+  let lastError;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const { stdout } = await execAsync(cmd, { 
+        encoding: 'utf8', 
+        timeout: DNS_TIMEOUT 
+      });
+      return stdout;
+    } catch (err) {
+      lastError = err;
+      if (attempt < retries) {
+        debugVerbose(`dig retry ${attempt + 1}/${retries} for: ${cmd}`);
+        await new Promise(r => setTimeout(r, 500 * (attempt + 1))); // Backoff
+      }
+    }
+  }
+  throw lastError;
+}
+
+// Parse dig status from output
+function parseDigStatus(stdout) {
+  const statusMatch = stdout.match(/status:\s*(\w+)/);
+  return statusMatch ? statusMatch[1] : null;
+}
+
+// Check A or AAAA record against a specific DNS server
+async function checkRecordType(domain, type, server) {
+  try {
+    const stdout = await digWithRetry(
+      `dig +noall +comments +answer ${type} ${domain} @${server}`
+    );
+    
+    const status = parseDigStatus(stdout);
+    const lines = stdout.split('\n');
+    
+    // Extract IPs from answer section
+    const records = [];
+    for (const line of lines) {
+      if (line.includes('\tA\t') && type === 'A') {
+        const match = line.match(/\s(\d{1,3}(?:\.\d{1,3}){3})$/);
+        if (match) records.push(match[1]);
+      } else if (line.includes('\tAAAA\t') && type === 'AAAA') {
+        const match = line.match(/\s([a-f0-9:]+)$/i);
+        if (match) records.push(match[1]);
+      }
+    }
+    
+    return { status, records, server };
+  } catch (err) {
+    return { status: 'ERROR', records: [], server, error: err.message };
+  }
+}
+
+// Check SOA record to verify domain registration
+async function checkSOA(domain) {
+  // Extract base domain for SOA check (handles multi-part TLDs like .co.uk)
+  const baseDomain = getBaseDomain(domain.replace(/^www\./, ''));
+  
+  try {
+    const stdout = await digWithRetry(
+      `dig +noall +comments +answer SOA ${baseDomain} @${DNS_SERVERS[0]}`
+    );
+    
+    const status = parseDigStatus(stdout);
+    const hasSOA = stdout.includes('\tSOA\t');
+    
+    return { 
+      hasSOA, 
+      status,
+      baseDomain 
+    };
+  } catch (err) {
+    debugVerbose(`SOA check error for ${baseDomain}: ${err.message}`);
+    return { hasSOA: false, status: 'ERROR', baseDomain };
+  }
+}
+
+// Parallel DNS check across multiple servers
+async function parallelDNSCheck(domain, type) {
+  const checks = DNS_SERVERS.map(server => checkRecordType(domain, type, server));
+  const results = await Promise.all(checks);
+  
+  // Count NXDOMAIN responses
+  const nxdomainCount = results.filter(r => r.status === 'NXDOMAIN').length;
+  const noerrorCount = results.filter(r => r.status === 'NOERROR').length;
+  const allRecords = [...new Set(results.flatMap(r => r.records))];
+  
+  return {
+    nxdomainCount,
+    noerrorCount,
+    totalServers: DNS_SERVERS.length,
+    records: allRecords,
+    // Consider NXDOMAIN if majority agree
+    isNxdomain: nxdomainCount > DNS_SERVERS.length / 2,
+    results
+  };
+}
+
 async function checkDNSRecord(domain) {
   try {
     // Try both www and non-www variants
@@ -559,38 +664,79 @@ async function checkDNSRecord(domain) {
       : [domain, `www.${domain}`];
     
     for (const variant of variants) {
-      try {
-        const { stdout } = await execAsync(`dig +short A ${variant}`, { 
-          encoding: 'utf8',
-          timeout: 5000
-        });
-        const result = stdout.trim();
-        
-        if (result) {
-          // Filter out non-IP responses (sometimes dig returns CNAME or other records)
-          const ips = result.split('\n').filter(line => {
-            // Check if line looks like an IPv4 address
-            return /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(line.trim());
-          });
-          
-          if (ips.length > 0) {
-            return {
-              hasRecord: true,
-              variant: variant,
-              ips: ips
-            };
-          }
+      // Parallel check A and AAAA records across all DNS servers
+      const [aCheck, aaaaCheck] = await Promise.all([
+        parallelDNSCheck(variant, 'A'),
+        parallelDNSCheck(variant, 'AAAA')
+      ]);
+      
+      // If both A and AAAA return NXDOMAIN from majority of servers
+      if (aCheck.isNxdomain && aaaaCheck.isNxdomain) {
+        debugVerbose(`${variant}: NXDOMAIN confirmed (A: ${aCheck.nxdomainCount}/${aCheck.totalServers}, AAAA: ${aaaaCheck.nxdomainCount}/${aaaaCheck.totalServers})`);
+        continue; // Try next variant
+      }
+      
+      // Has records
+      if (aCheck.records.length > 0 || aaaaCheck.records.length > 0) {
+        return {
+          hasRecord: true,
+          variant: variant,
+          ips: aCheck.records,
+          ipv6: aaaaCheck.records,
+          status: 'NOERROR',
+          reason: null
+        };
+      }
+      
+      // No records but not NXDOMAIN (might be CNAME-only or other)
+      if (!aCheck.isNxdomain || !aaaaCheck.isNxdomain) {
+        // Check SOA to verify domain exists
+        const soaCheck = await checkSOA(variant);
+        if (soaCheck.hasSOA) {
+          return {
+            hasRecord: true,
+            variant: variant,
+            ips: [],
+            ipv6: [],
+            status: 'NOERROR',
+            reason: 'Domain exists (SOA found) but no A/AAAA records',
+            soaVerified: true
+          };
         }
-      } catch (err) {
-        // Try next variant
-        continue;
       }
     }
     
-    return { hasRecord: false, variant: null, ips: [] };
+    // All variants failed - do final SOA check on base domain
+    const baseDomain = domain.replace(/^www\./, '');
+    const finalSOA = await checkSOA(baseDomain);
+    
+    if (finalSOA.hasSOA) {
+      return {
+        hasRecord: false,
+        variant: null,
+        ips: [],
+        status: 'NORECORD',
+        reason: 'Domain registered (SOA exists) but no A/AAAA records',
+        soaVerified: true
+      };
+    }
+    
+    return { 
+      hasRecord: false, 
+      variant: null, 
+      ips: [], 
+      status: 'NXDOMAIN',
+      reason: 'Domain does not exist (confirmed across multiple DNS servers)'
+    };
   } catch (error) {
     debugVerbose(`DNS check error for ${domain}: ${error.message}`);
-    return { hasRecord: false, variant: null, ips: [] };
+    return { 
+      hasRecord: false, 
+      variant: null, 
+      ips: [], 
+      status: 'ERROR',
+      reason: error.message
+    };
   }
 }
 
@@ -992,9 +1138,13 @@ function writeDeadDomains(deadDomains, scanTimestamp, inputFile) {
     
     // Add DNS info if available
     if (item.dnsInfo && item.dnsInfo.hasRecord) {
-      line += ` | DNS: ${item.dnsInfo.variant} -> ${item.dnsInfo.ips.join(', ')}`;
+      const ips = item.dnsInfo.ips.concat(item.dnsInfo.ipv6 || []).join(', ');
+      line += ` | DNS: ${item.dnsInfo.variant} -> ${ips}`;
     } else if (item.dnsInfo && !item.dnsInfo.hasRecord) {
-      line += ` | DNS: No A record`;
+      line += ` | DNS: ${item.dnsInfo.status}`;
+      if (item.dnsInfo.reason) {
+        line += ` (${item.dnsInfo.reason})`;
+      }
     }
     
     lines.push(line);
