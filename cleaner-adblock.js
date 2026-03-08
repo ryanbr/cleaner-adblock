@@ -14,12 +14,8 @@ let CONCURRENCY = 12; // Number of concurrent checks
 let DEAD_DOMAINS_FILE; // Will be set with timestamp in main()
 let REDIRECT_DOMAINS_FILE; // Will be set with timestamp in main()
 
-// Ignored Domains - domains to skip checking (add domains that are incorrectly flagged)
-// These domains will be completely skipped during scanning
-const IGNORED_DOMAINS = [
-  // Add domains here that should be ignored, one per line
-  // Examples:
-  // 'example.com',
+// Default ignored domains - domains to skip checking (add domains that are incorrectly flagged)
+const DEFAULT_IGNORED_DOMAINS = [
   '2mdn.net',
   'aliexpress.us',
   'akamaized.net',
@@ -53,6 +49,7 @@ const IGNORED_DOMAINS = [
   'yahoo.com',
   'zoom.us'
 ];
+let IGNORED_DOMAINS = [...DEFAULT_IGNORED_DOMAINS];
 
 // Custom User Agent - Chrome on Windows
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36';
@@ -80,33 +77,36 @@ let TEST_COUNT = 5; // Number of domains to test in test mode
 let QUICK_DISCONNECT = false; // Disconnect as soon as result is determined
 let shuttingDown = false; // Graceful shutdown flag
 
+// Track which flags were explicitly set via CLI
+const cliFlags = new Set();
+
 for (const arg of args) {
   if (arg.startsWith('--input=')) {
     INPUT_FILE = arg.split('=')[1] || null;
   } else if (arg === '--add-www') {
-    ADD_WWW = true;
+    ADD_WWW = true; cliFlags.add('addWww');
   } else if (arg === '--ignore-similar') {
-    IGNORE_SIMILAR = true;
+    IGNORE_SIMILAR = true; cliFlags.add('ignoreSimilar');
   } else if (arg === '--ignore-nav-timeout') {
     IGNORE_NAV_TIMEOUT = true;
   } else if (arg === '--disable-block-resources') {
-    BLOCK_RESOURCES = false;
+    BLOCK_RESOURCES = false; cliFlags.add('blockResources');
   } else if (arg === '--simple-domains') {
-    SIMPLE_DOMAINS = true;
+    SIMPLE_DOMAINS = true; cliFlags.add('simpleDomains');
   } else if (arg === '--check-dig') {
-    CHECK_DIG = true;
+    CHECK_DIG = true; cliFlags.add('checkDig');
   } else if (arg === '--check-dig-always') {
-    CHECK_DIG_ALWAYS = true;
+    CHECK_DIG_ALWAYS = true; cliFlags.add('checkDigAlways');
   } else if (arg === '--check-ping') {
-    CHECK_PING = true;
+    CHECK_PING = true; cliFlags.add('checkPing');
   } else if (arg === '--export-list') {
-    EXPORT_LIST = true;
+    EXPORT_LIST = true; cliFlags.add('exportList');
   } else if (arg === '--remove-redirects') {
-    REMOVE_REDIRECTS = true;
+    REMOVE_REDIRECTS = true; cliFlags.add('removeRedirects');
   } else if (arg === '--debug') {
     DEBUG = true;
   } else if (arg === '--localhost') {
-    LOCALHOST_LIST = true;
+    LOCALHOST_LIST = true; cliFlags.add('localhost');
   } else if (arg === '--debug-verbose') {
     DEBUG = true;
     DEBUG_VERBOSE = true;
@@ -130,12 +130,60 @@ for (const arg of args) {
   } else if (arg.startsWith('--concurrency=')) {
     const parsed = parseInt(arg.split('=')[1], 10);
     CONCURRENCY = Math.max(1, Math.min(50, isNaN(parsed) ? 12 : parsed));
+    cliFlags.add('concurrency');
   } else if (arg === '--quick-disconnect') {
-    QUICK_DISCONNECT = true;
+    QUICK_DISCONNECT = true; cliFlags.add('quickDisconnect');
   } else if (!arg.startsWith('-') && !INPUT_FILE) {
     // Positional argument (not a flag) - treat as input file
     INPUT_FILE = arg;
   }
+}
+
+// Load .cleanerconfig if it exists
+const CONFIG_FILE = '.cleanerconfig';
+try {
+  const fs_ = require('fs');
+  if (fs_.existsSync(CONFIG_FILE)) {
+    const config = JSON.parse(fs_.readFileSync(CONFIG_FILE, 'utf8'));
+
+    // Get per-file overrides if input file matches
+    const inputBasename = INPUT_FILE ? require('path').basename(INPUT_FILE) : null;
+    const fileConfig = (inputBasename && config.files && config.files[inputBasename]) || {};
+
+    // Merge: per-file overrides > global config (CLI flags always win)
+    const merged = { ...config, ...fileConfig };
+
+    // Apply config values only if CLI didn't explicitly set them
+    if (!cliFlags.has('concurrency') && merged.concurrency != null) {
+      CONCURRENCY = Math.max(1, Math.min(50, merged.concurrency));
+    }
+    if (!cliFlags.has('addWww') && merged.addWww != null) ADD_WWW = merged.addWww;
+    if (!cliFlags.has('ignoreSimilar') && merged.ignoreSimilar != null) IGNORE_SIMILAR = merged.ignoreSimilar;
+    if (!cliFlags.has('blockResources') && merged.blockResources != null) BLOCK_RESOURCES = merged.blockResources;
+    if (!cliFlags.has('simpleDomains') && merged.simpleDomains != null) SIMPLE_DOMAINS = merged.simpleDomains;
+    if (!cliFlags.has('checkDig') && merged.checkDig != null) CHECK_DIG = merged.checkDig;
+    if (!cliFlags.has('checkDigAlways') && merged.checkDigAlways != null) CHECK_DIG_ALWAYS = merged.checkDigAlways;
+    if (!cliFlags.has('checkPing') && merged.checkPing != null) CHECK_PING = merged.checkPing;
+    if (!cliFlags.has('exportList') && merged.exportList != null) EXPORT_LIST = merged.exportList;
+    if (!cliFlags.has('removeRedirects') && merged.removeRedirects != null) REMOVE_REDIRECTS = merged.removeRedirects;
+    if (!cliFlags.has('quickDisconnect') && merged.quickDisconnect != null) QUICK_DISCONNECT = merged.quickDisconnect;
+    if (!cliFlags.has('localhost') && merged.localhost != null) LOCALHOST_LIST = merged.localhost;
+
+    // Merge ignored domains (global + per-file, deduplicated)
+    const configIgnored = [
+      ...(config.ignoredDomains || []),
+      ...(fileConfig.ignoredDomains || [])
+    ];
+    if (configIgnored.length > 0) {
+      const combined = new Set([...IGNORED_DOMAINS, ...configIgnored]);
+      IGNORED_DOMAINS = [...combined];
+    }
+
+    const hasFileOverrides = inputBasename && config.files && config.files[inputBasename];
+    console.log(`Loaded config from ${CONFIG_FILE}${hasFileOverrides ? ` (with overrides for ${inputBasename})` : ''}`);
+  }
+} catch (error) {
+  console.error(`Warning: Error reading ${CONFIG_FILE}: ${error.message}`);
 }
 
 // Show help if requested (before loading heavy modules)
@@ -178,7 +226,8 @@ Output Files:
 
 Configuration:
   Timeout: ${TIMEOUT / 1000}s | Concurrency: ${CONCURRENCY} | Ignored domains: ${IGNORED_DOMAINS.length}
-  Edit IGNORED_DOMAINS array in script to skip specific domains.
+  Config file: .cleanerconfig (JSON, optional - auto-detected)
+  Edit IGNORED_DOMAINS array in script or .cleanerconfig to skip specific domains.
 `);
   process.exit(0);
 }
