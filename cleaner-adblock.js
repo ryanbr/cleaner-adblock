@@ -139,7 +139,12 @@ try {
     }
 
     // Inject --color into argv so colorize.js picks it up at require time
-    if (config.color && !process.argv.includes('--color') && !process.argv.includes('--colour')) {
+    // Check global config and all per-file configs (colorize.js loads once at startup)
+    let hasColor = config.color;
+    if (!hasColor && config.files) {
+      hasColor = Object.values(config.files).some(f => f.color);
+    }
+    if (hasColor && !process.argv.includes('--color') && !process.argv.includes('--colour')) {
       process.argv.push('--color');
     }
 
