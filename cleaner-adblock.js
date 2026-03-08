@@ -777,9 +777,7 @@ async function checkDomain(browser, domainObj, index, total) {
   
   debugVerbose(`Starting check for domain: ${domain} (${index + 1}/${total})`);
   debugVerbose(`Variants to check: ${variants.join(', ')}`);
-  
-  console.log(`[${index + 1}/${total}] Checking ${domain}...`);
-  
+
   // Try each variant until one succeeds
   for (let i = 0; i < variants.length; i++) {
     if (shuttingDown) {
