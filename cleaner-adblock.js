@@ -1283,13 +1283,20 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
   
   // Filter out ignored domains
   if (IGNORED_DOMAINS.length > 0) {
-    const beforeCount = domains.length;
-    domains = domains.filter(domain => !shouldIgnoreDomain(domain));
-    const ignoredCount = beforeCount - domains.length;
+    const kept = [];
+    const ignored = [];
+    for (const domain of domains) {
+      if (shouldIgnoreDomain(domain)) {
+        ignored.push(domain);
+      } else {
+        kept.push(domain);
+      }
+    }
+    const ignoredCount = ignored.length;
+    domains = kept;
     if (ignoredCount > 0) {
       console.log(`Ignored ${ignoredCount} domain(s) from IGNORED_DOMAINS list`);
       if (DEBUG) {
-        const ignored = IGNORED_DOMAINS.filter(d => beforeCount > domains.length);
         console.log(`Ignored domains: ${ignored.join(', ')}`);
       }
       console.log(`Remaining domains to check: ${domains.length}\n`);
