@@ -48,7 +48,8 @@ const cliFlags = new Set();
 
 for (const arg of args) {
   if (arg.startsWith('--input=')) {
-    INPUT_FILE = arg.split('=')[1] || null;
+    const inputVal = arg.split('=')[1] || null;
+    if (inputVal) INPUT_FILES.push(inputVal);
   } else if (arg === '--add-www') {
     ADD_WWW = true; cliFlags.add('addWww');
   } else if (arg === '--ignore-similar') {
