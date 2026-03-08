@@ -19,8 +19,12 @@ This tool parses adblock filter lists, checks the status of domains found in var
 - **Smart Domain Variants**: Optionally checks both `domain.com` and `www.domain.com`
 - **Similar Domain Filtering**: Can ignore redirects to subdomains of the same base domain
 - **DNS Verification**: Optionally verify dead domains with DNS lookups
+- **Ping Verification**: Optionally verify dead domains with ping checks
 - **Export Cleaned Lists**: Generate filter lists with dead domains removed
+- **Hosts File Support**: Parse hosts file format (0.0.0.0/127.0.0.1 entries)
+- **Config File Support**: Per-project and per-file settings via `.cleanerconfig`
 - **Comprehensive Error Handling**: Detects DNS failures, timeouts, HTTP errors
+- **Graceful Shutdown**: Clean browser cleanup on Ctrl+C
 - **Debug Modes**: Various debug levels for troubleshooting
 - **Test Mode**: Quick testing on a subset of domains
 
@@ -28,7 +32,7 @@ This tool parses adblock filter lists, checks the status of domains found in var
 
 ### Prerequisites
 
-- Node.js (v14 or higher recommended)
+- Node.js (v20 or higher recommended)
 - npm (comes with Node.js)
 
 ### Setup
@@ -62,6 +66,7 @@ node cleaner-adblock.js <file> [options]
 
 - `--input=<file>` - Specify input file to scan (alternative to positional arg)
 - `--simple-domains` - Parse input as plain domain list (one per line) instead of filter rules
+- `--localhost` - Parse hosts file format (0.0.0.0/127.0.0.1 domain)
 
 #### Domain Checking Options
 
@@ -69,15 +74,18 @@ node cleaner-adblock.js <file> [options]
 - `--ignore-similar` - Ignore redirects to subdomains of same base domain
 - `--check-dig` - Verify dead domains with DNS lookup
 - `--check-dig-always` - Only report domains with no DNS A records
+- `--check-ping` - Verify dead domains with ping (checks both bare and www variants)
 
 #### Output Options
 
 - `--export-list` - Export cleaned filter list (removes dead domains)
+- `--remove-redirects` - Always remove redirected domains from exported list
 
 #### Performance Options
 
 - `--concurrency=N` - Number of concurrent checks (1-50, default: 12)
 - `--disable-block-resources` - Allow images/CSS/fonts to load (slower scans)
+- `--quick-disconnect` - Disconnect once status is determined (faster scans)
 
 #### Debug Options
 
@@ -91,6 +99,10 @@ node cleaner-adblock.js <file> [options]
 
 - `--test-mode` - Only test first 5 domains (quick testing)
 - `--test-count=N` - Only test first N domains
+
+#### Display Options
+
+- `--color`, `--colour` - Enable colored output
 
 #### Help
 
@@ -108,6 +120,9 @@ node cleaner-adblock.js --input=my_rules.txt
 # Scan a simple list of domains (one per line)
 node cleaner-adblock.js domains.txt --simple-domains
 
+# Scan a hosts file
+node cleaner-adblock.js hosts.txt --localhost
+
 # Check both domain.com and www.domain.com variants
 node cleaner-adblock.js my_rules.txt --add-www
 
@@ -117,6 +132,9 @@ node cleaner-adblock.js my_rules.txt --ignore-similar
 # Combine options
 node cleaner-adblock.js my_rules.txt --add-www --ignore-similar
 
+# Verify dead domains with ping before confirming
+node cleaner-adblock.js my_rules.txt --check-ping
+
 # Only report domains with no DNS records
 node cleaner-adblock.js my_rules.txt --check-dig-always
 
@@ -125,6 +143,9 @@ node cleaner-adblock.js my_rules.txt --export-list
 
 # Increase concurrency for faster scans
 node cleaner-adblock.js my_rules.txt --concurrency=20
+
+# Faster scans with quick disconnect
+node cleaner-adblock.js my_rules.txt --quick-disconnect
 
 # Debug mode for troubleshooting
 node cleaner-adblock.js my_rules.txt --debug --test-mode
@@ -227,20 +248,52 @@ example.org ? example.com # https://example.com/
    - Handle HTTP errors
    - Capture timeouts
 5. **DNS Verification**: Optionally verifies dead domains with dig
-6. **Categorize Results**: Separates dead domains from redirecting domains
-7. **Generate Reports**: Creates organized output files with explanations
+6. **Ping Verification**: Optionally verifies dead domains with ping
+7. **Categorize Results**: Separates dead domains from redirecting domains
+8. **Generate Reports**: Creates organized output files with explanations
 
 ## Configuration
 
-Default settings (can be modified via command line or in the code):
+### Config File (`.cleanerconfig`)
+
+Create a `.cleanerconfig` file in your working directory to set defaults per project and per file:
+
+```json
+{
+  "concurrency": 12,
+  "color": true,
+  "ignoredDomains": [
+    "cloudfront.net",
+    "fastly.net",
+    "googlesyndication.com"
+  ],
+  "files": {
+    "easylist_specific_hide.txt": {
+      "addWww": true,
+      "checkPing": true,
+      "ignoreSimilar": true,
+      "concurrency": 20,
+      "ignoredDomains": [
+        "specific-to-this-list.net"
+      ]
+    }
+  }
+}
+```
+
+**Priority order**: CLI flags > per-file config > global config > defaults
+
+**Available config options**: `concurrency`, `addWww`, `ignoreSimilar`, `checkDig`, `checkDigAlways`, `checkPing`, `blockResources`, `exportList`, `removeRedirects`, `quickDisconnect`, `localhost`, `color`
+
+Per-file `ignoredDomains` are merged with global `ignoredDomains` (not replaced).
+
+### Default Settings
 
 ```javascript
 const TIMEOUT = 25000;              // Page load timeout (25 seconds)
 const FORCE_CLOSE_TIMEOUT = 60000;  // Force-close timeout (60 seconds)
 const CONCURRENCY = 12;             // Concurrent domain checks (use --concurrency=N)
 ```
-
-You can also edit the `IGNORED_DOMAINS` array in the script to skip specific domains that are incorrectly flagged.
 
 ## Special Features
 
@@ -272,6 +325,22 @@ Reduces noise from internal subdomain redirects:
 - `example.com` → `different.com` (flagged - different domain)
 
 Useful for sites that redirect to CDN or regional subdomains.
+
+### `--check-ping` Behavior
+
+Verifies dead domains with ICMP ping before confirming them as dead:
+- Tries both `domain.com` and `www.domain.com` (1 packet, 3s timeout each)
+- If either responds to ping, the domain is removed from the dead list
+- Skips domains that returned HTTP errors (404/5xx) since they clearly have a running server
+- Redirecting domains are moved to the dead list without pinging (they already responded)
+- Runs after the browser scan in batches of 10 concurrent pings
+
+### `--localhost` Behavior
+
+Parses hosts file format:
+- Matches lines like `0.0.0.0 domain.com` or `127.0.0.1 domain.com`
+- Skips localhost entries
+- Ignores comments starting with `#` or `!`
 
 ### `--export-list` Behavior
 
@@ -325,8 +394,10 @@ node cleaner-adblock.js my_rules.txt --concurrency=6
 
 - Use `--test-mode` first to verify everything works
 - Adjust concurrency with `--concurrency=N` based on your system resources
+- Use `--quick-disconnect` for faster scans when you only need status codes
 - Use `--ignore-similar` to reduce false positives
 - Use default resource blocking (don't use `--disable-block-resources`) for faster scans
+- Use `.cleanerconfig` to save per-file settings and avoid repeating flags
 - Monitor system resources during large scans
 - Consider splitting very large filter lists
 
