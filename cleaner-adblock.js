@@ -207,6 +207,8 @@ const networkDomainPattern = /\|\|([a-z0-9.-]+)/i;
 const urlAttrPattern = /\[[a-z-]+[\^*]?=["'][^"']*https?:\/\/([a-z0-9.-]+)/gi;
 const fileExtPattern = /\.(php|js|jpg|jpeg|png|gif|webp|svg|css|txt|html|htm)$/i;
 const ublockCosmeticPattern = /^([^#\s]+?)(?:##(?:\+js\()?|#@#|##\^)/;
+const deadErrorPattern = /timeout|ERR_NAME_NOT_RESOLVED|ERR_CONNECTION_REFUSED|ERR_CONNECTION_TIMED_OUT|ERR_CONNECTION_RESET|ERR_CONNECTION_CLOSED|ERR_ADDRESS_UNREACHABLE|ERR_BLOCKED_BY_CLIENT|Execution context was destroyed/;
+const EMPTY_ARRAY = Object.freeze([]);
 
 // Debug logging functions
 function debugLog(message, level = 'DEBUG') {
@@ -278,7 +280,7 @@ function parseSimpleDomains(line) {
   
   // Skip empty lines and comments
   if (!line || line.startsWith('#') || line.startsWith('!') || line.startsWith('//')) {
-    return [];
+    return EMPTY_ARRAY;
   }
   
   const validDomains = [];
@@ -314,27 +316,27 @@ function parseLocalhostLine(line) {
   
   // Skip empty lines and comments
   if (!line || line.startsWith('#') || line.startsWith('!')) {
-    return [];
+    return EMPTY_ARRAY;
   }
   
   // Match: 0.0.0.0 domain.com or 127.0.0.1 domain.com (with optional trailing comment)
   const match = line.match(/^(?:0\.0\.0\.0|127\.0\.0\.1)\s+([a-z0-9.-]+)/i);
   if (!match) {
-    return [];
+    return EMPTY_ARRAY;
   }
   
   let domain = match[1].toLowerCase();
   
   // Skip localhost entries
   if (domain === 'localhost' || domain === 'localhost.localdomain') {
-    return [];
+    return EMPTY_ARRAY;
   }
   
   if (isValidDomain(domain)) {
     return [domain];
   }
-  
-  return [];
+
+  return EMPTY_ARRAY;
 }
 
 // Check if a domain should be ignored (including subdomains)
@@ -356,7 +358,7 @@ function extractDomains(line) {
   line = line.trim();
   
   if (!line || line.startsWith('!') || line.startsWith('[')) {
-    return [];
+    return EMPTY_ARRAY;
   }
   
   const validDomains = [];
@@ -1039,24 +1041,8 @@ async function checkDomain(browser, domainObj, index, total) {
       const isNavTimeout = error.message.includes('Navigation timeout of');
       
       const isDead = !isCertError && !isNavTimeout && (
-        error.message.includes('timeout') ||
-        error.message.includes('ERR_NAME_NOT_RESOLVED') ||
-        error.message.includes('ERR_CONNECTION_REFUSED') ||
-        error.message.includes('ERR_CONNECTION_TIMED_OUT') ||
-        error.message.includes('ERR_CONNECTION_RESET') ||
-        error.message.includes('ERR_CONNECTION_CLOSED') ||
-        error.message.includes('ERR_ADDRESS_UNREACHABLE') ||
-        error.message.includes('ERR_BLOCKED_BY_CLIENT') ||
-        error.message.includes('Execution context was destroyed') ||
-        // Check if main request failed with a connection error
-        (mainRequestError && (
-          mainRequestError.includes('ERR_CONNECTION_CLOSED') ||
-          mainRequestError.includes('ERR_CONNECTION_REFUSED') ||
-          mainRequestError.includes('ERR_CONNECTION_RESET') ||
-          mainRequestError.includes('ERR_NAME_NOT_RESOLVED') ||
-          mainRequestError.includes('ERR_ADDRESS_UNREACHABLE') ||
-          mainRequestError.includes('ERR_BLOCKED_BY_CLIENT')
-        ))
+        deadErrorPattern.test(error.message) ||
+        (mainRequestError && deadErrorPattern.test(mainRequestError))
       );
       
       // Use the actual network error if available, otherwise use the generic error message
