@@ -1384,8 +1384,12 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
   }
   
   // Separate results by type
-  const deadDomains = results.filter(r => r.type === 'dead').map(r => r.data);
-  const redirectDomains = results.filter(r => r.type === 'redirect').map(r => r.data);
+  const deadDomains = [];
+  const redirectDomains = [];
+  for (const r of results) {
+    if (r.type === 'dead') deadDomains.push(r.data);
+    else if (r.type === 'redirect') redirectDomains.push(r.data);
+  }
   
   // Batch DNS checks for all dead domains (if enabled)
   if ((CHECK_DIG || CHECK_DIG_ALWAYS) && deadDomains.length > 0) {
