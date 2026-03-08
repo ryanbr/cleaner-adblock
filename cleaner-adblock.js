@@ -14,42 +14,8 @@ let CONCURRENCY = 12; // Number of concurrent checks
 let DEAD_DOMAINS_FILE; // Will be set with timestamp in main()
 let REDIRECT_DOMAINS_FILE; // Will be set with timestamp in main()
 
-// Default ignored domains - domains to skip checking (add domains that are incorrectly flagged)
-const DEFAULT_IGNORED_DOMAINS = [
-  '2mdn.net',
-  'aliexpress.us',
-  'akamaized.net',
-  'cloudfront.net',
-  'fastly.net',
-  'fwmrm.net',
-  'ntv.io',
-  'golfdigest.com',
-  'm.economictimes.com',
-  'twitter.com',
-  'googlesyndication.com',
-  'testpages.adblockplus.org',
-  'testpages.eyeo.com',
-  'all-nettools.com',
-  'dailycaller.com',
-  'demap.info',
-  'google-analytics.com',
-  'medievalists.net',
-  'moviesfoundonline.com',
-  'doubleclick.net',
-  'downloads.codefi.re',
-  'rubiconproject.com',
-  'cdn.ampproject.org',
-  'timesofindia.com',
-  'aainflight.com',
-  'flyfi.com',
-  'tinypass.com',
-  'wixstatic.com',
-  'tweakers.net',
-  'gouv.fr',
-  'yahoo.com',
-  'zoom.us'
-];
-let IGNORED_DOMAINS = [...DEFAULT_IGNORED_DOMAINS];
+// Ignored domains - loaded from .cleanerconfig (or empty if no config)
+let IGNORED_DOMAINS = [];
 
 // Custom User Agent - Chrome on Windows
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36';

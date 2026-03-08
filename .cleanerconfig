@@ -1,0 +1,46 @@
+{
+  "concurrency": 12,
+  "ignoredDomains": [
+    "2mdn.net",
+    "aliexpress.us",
+    "akamaized.net",
+    "cloudfront.net",
+    "fastly.net",
+    "fwmrm.net",
+    "ntv.io",
+    "golfdigest.com",
+    "m.economictimes.com",
+    "twitter.com",
+    "googlesyndication.com",
+    "testpages.adblockplus.org",
+    "testpages.eyeo.com",
+    "all-nettools.com",
+    "dailycaller.com",
+    "demap.info",
+    "google-analytics.com",
+    "medievalists.net",
+    "moviesfoundonline.com",
+    "doubleclick.net",
+    "downloads.codefi.re",
+    "rubiconproject.com",
+    "cdn.ampproject.org",
+    "timesofindia.com",
+    "aainflight.com",
+    "flyfi.com",
+    "tinypass.com",
+    "wixstatic.com",
+    "tweakers.net",
+    "gouv.fr",
+    "yahoo.com",
+    "zoom.us"
+  ],
+  "files": {
+    "easylist_specific_hide.txt": {
+      "addWww": true,
+      "checkPing": true,
+      "ignoreSimilar": true,
+      "color": true,
+      "ignoredDomains": []
+    }
+  }
+}
