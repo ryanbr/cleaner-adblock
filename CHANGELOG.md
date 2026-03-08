@@ -1,7 +1,8 @@
 # Changelog
 
-## Unreleased
+## 2.0.11
 
+- Add multi-file support for sequential processing (`node cleaner-adblock.js file1.txt file2.txt`)
 - Add `.cleanerconfig` support for per-project and per-file settings
 - Add `--use-config=<file>` flag to specify a custom config file
 - Support color flag from `.cleanerconfig`
@@ -15,7 +16,7 @@
 - Single-pass result separation instead of double filter+map
 - Add browser launch flags to reduce Chromium resource usage
 - Set user agent at browser level instead of per-page
-- Replace `new URL()` with string ops in response listener hot path
+- Replace `new URL()` with string ops in hot paths
 - Update README with new features and `.cleanerconfig` docs
 
 ## 2.0.10
