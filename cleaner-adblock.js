@@ -1483,7 +1483,7 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
   }
   
   // Export cleaned list if requested
-  if (EXPORT_LIST && deadDomains.length > 0) {
+  if (EXPORT_LIST && (deadDomains.length > 0 || redirectDomains.length > 0)) {
     const exportedFile = exportCleanedList(INPUT_FILE, deadDomains, redirectDomains, IGNORE_SIMILAR, REMOVE_REDIRECTS);
     if (exportedFile === null) {
       console.error(`${tags.error || '[ERROR]'} Failed to export cleaned filter list`);
