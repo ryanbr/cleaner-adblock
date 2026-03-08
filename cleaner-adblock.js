@@ -927,13 +927,15 @@ async function checkDomain(browser, domainObj, index, total) {
           }
         } else if (QUICK_DISCONNECT && !pageClosed) {
           // Check for redirect to different domain
-          try {
-            const responseDomain = new URL(responseUrl).hostname.replace(/^www\./, '');
-            if (responseDomain !== variantDomain && response.status() >= 200 && response.status() < 400) {
+          if (response.status() >= 200 && response.status() < 400) {
+            const slashIndex = responseUrl.indexOf('/', 8); // skip "https://"
+            const hostPart = slashIndex > 0 ? responseUrl.substring(8, slashIndex) : responseUrl.substring(8);
+            const responseDomain = hostPart.startsWith('www.') ? hostPart.substring(4) : hostPart;
+            if (responseDomain !== variantDomain) {
               debugVerbose(`Redirect detected to ${responseDomain}, quick disconnecting`);
               quickDisconnect();
             }
-          } catch (e) { /* Invalid URL, ignore */ }
+          }
         } else if (DEBUG_NETWORK) {
           debugNetwork(`Response: ${response.status()} ${responseUrl}`);
         }
