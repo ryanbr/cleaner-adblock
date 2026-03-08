@@ -103,6 +103,7 @@ node cleaner-adblock.js <file> [options]
 #### Display Options
 
 - `--color`, `--colour` - Enable colored output
+- `--use-config=<file>` - Use a custom config file instead of `.cleanerconfig`
 
 #### Help
 

@@ -96,14 +96,17 @@ for (const arg of args) {
     cliFlags.add('concurrency');
   } else if (arg === '--quick-disconnect') {
     QUICK_DISCONNECT = true; cliFlags.add('quickDisconnect');
+  } else if (arg.startsWith('--use-config=')) {
+    cliFlags.add('useConfig');
   } else if (!arg.startsWith('-') && !INPUT_FILE) {
     // Positional argument (not a flag) - treat as input file
     INPUT_FILE = arg;
   }
 }
 
-// Load .cleanerconfig if it exists
-const CONFIG_FILE = '.cleanerconfig';
+// Load config file (.cleanerconfig or --use-config=<file>)
+const useConfigArg = args.find(a => a.startsWith('--use-config='));
+const CONFIG_FILE = useConfigArg ? useConfigArg.split('=')[1] : '.cleanerconfig';
 try {
   const fs_ = require('fs');
   if (fs_.existsSync(CONFIG_FILE)) {
@@ -149,9 +152,13 @@ try {
 
     const hasFileOverrides = inputBasename && config.files && config.files[inputBasename];
     console.log(`Loaded config from ${CONFIG_FILE}${hasFileOverrides ? ` (with overrides for ${inputBasename})` : ''}`);
+  } else if (useConfigArg) {
+    console.error(`Error: Config file not found: ${CONFIG_FILE}`);
+    process.exit(1);
   }
 } catch (error) {
-  console.error(`Warning: Error reading ${CONFIG_FILE}: ${error.message}`);
+  console.error(`Error reading ${CONFIG_FILE}: ${error.message}`);
+  if (useConfigArg) process.exit(1);
 }
 
 // Show help if requested (before loading heavy modules)
@@ -177,6 +184,7 @@ Options:
   --remove-redirects    Always remove redirected domains (ignores DNS checks)
   --localhost           Parse hosts file format (0.0.0.0/127.0.0.1 domain)
   --color, --colour     Enable colored output
+  --use-config=<file>   Use a custom config file instead of .cleanerconfig
   --debug               Enable basic debug output
   --debug-verbose       Verbose debug output
   --debug-network       Log network requests
