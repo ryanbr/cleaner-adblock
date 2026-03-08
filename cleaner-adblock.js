@@ -142,6 +142,11 @@ try {
       IGNORED_DOMAINS = [...combined];
     }
 
+    // Inject --color into argv so colorize.js picks it up at require time
+    if (merged.color && !process.argv.includes('--color') && !process.argv.includes('--colour')) {
+      process.argv.push('--color');
+    }
+
     const hasFileOverrides = inputBasename && config.files && config.files[inputBasename];
     console.log(`Loaded config from ${CONFIG_FILE}${hasFileOverrides ? ` (with overrides for ${inputBasename})` : ''}`);
   }
