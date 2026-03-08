@@ -844,7 +844,12 @@ async function checkDomain(browser, domainObj, index, total) {
         console.log(`  ${tags.timeout} Force-closing ${variant} after ${FORCE_CLOSE_TIMEOUT / 1000}s`);
       }
       try {
-        if (page) await page.close();
+        if (page) {
+          await Promise.race([
+            page.close(),
+            new Promise(resolve => setTimeout(resolve, 5000))
+          ]);
+        }
       } catch (e) {
         // Already closed, ignore
       }
