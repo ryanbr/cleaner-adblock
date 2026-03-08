@@ -200,6 +200,13 @@ const { getBaseDomain, isSimilarDomain, multiTLDs } = require('./lib/domain-util
 
 const ipv4Pattern = /^(\d{1,3}\.){3}\d{1,3}$/;
 const domainCharPattern = /^[a-z0-9.-]+$/;
+const adguardRulePattern = /^([^#$]+)(?:#[@$%?]*#|\$\$)/;
+const domainParamPattern = /domain=([^,\s$]+)/;
+const wildcardTLDPattern = /\|\|[a-z0-9.-]+\.\*/;
+const networkDomainPattern = /\|\|([a-z0-9.-]+)/i;
+const urlAttrPattern = /\[[a-z-]+[\^*]?=["'][^"']*https?:\/\/([a-z0-9.-]+)/gi;
+const fileExtPattern = /\.(php|js|jpg|jpeg|png|gif|webp|svg|css|txt|html|htm)$/i;
+const ublockCosmeticPattern = /^([^#\s]+?)(?:##(?:\+js\()?|#@#|##\^)/;
 
 // Debug logging functions
 function debugLog(message, level = 'DEBUG') {
@@ -364,7 +371,7 @@ function extractDomains(line) {
   // domain.com#@$?#selector (extended CSS exception)
   // domain.com$$script[...] (HTML filtering)
   // domain1.com,domain2.com##selector (multiple domains)
-  const adguardMatch = line.match(/^([^#$]+)(?:#[@$%?]*#|\$\$)/);
+  const adguardMatch = line.match(adguardRulePattern);
   if (adguardMatch) {
     const domainPart = adguardMatch[1];
     const domainList = domainPart.split(',').map(d => d.trim());
@@ -397,7 +404,7 @@ function extractDomains(line) {
   // Examples: 
   // /path$script,domain=example.com
   // ||domain.com^$script,domain=site1.com|site2.com
-  const domainMatch = line.match(/domain=([^,\s$]+)/);
+  const domainMatch = line.match(domainParamPattern);
   if (domainMatch) {
     const domainList = domainMatch[1].split('|');
     for (let domain of domainList) {
@@ -424,10 +431,10 @@ function extractDomains(line) {
   // Extract domain from network rule format (||domain.com^ or ||domain.com/)
   if (line.includes('||')) {
     // Skip wildcard TLD patterns like ||domain.* or ||domain.*^
-    if (/\|\|[a-z0-9.-]+\.\*/.test(line)) {
+    if (wildcardTLDPattern.test(line)) {
       return validDomains;
     }
-    const networkMatch = line.match(/\|\|([a-z0-9.-]+)/i);
+    const networkMatch = line.match(networkDomainPattern);
     if (networkMatch) {
       let domain = networkMatch[1];
       // Remove trailing dots (malformed domains)
@@ -449,13 +456,14 @@ function extractDomains(line) {
   // Matches: ##[href^="https://..."], ##[onclick^="...='https://..."], ##[data-url*="https://..."], etc.
   // Captures domain from any attribute with ^=, =, or *= containing an https:// or http:// URL
   // Excludes $= (ends with) as those typically match paths/filenames, not domains
-  const urlMatches = line.matchAll(/\[[a-z-]+[\^*]?=["'][^"']*https?:\/\/([a-z0-9.-]+)/gi);
+  urlAttrPattern.lastIndex = 0;
+  const urlMatches = line.matchAll(urlAttrPattern);
   for (const match of urlMatches) {
     let domain = match[1].toLowerCase();
     // Remove leading dots (e.g., .domain.com -> domain.com)
     domain = domain.replace(/^\.+/, '');
     // Skip if it looks like a file rather than a domain
-    if (/\.(php|js|jpg|jpeg|png|gif|webp|svg|css|txt|html|htm)$/i.test(domain)) {
+    if (fileExtPattern.test(domain)) {
       continue;
     }
     if (isValidDomain(domain)) {
@@ -464,7 +472,7 @@ function extractDomains(line) {
   }
   
   // Check for uBlock Origin element hiding/cosmetic rules (##, #@#, etc.)
-  const match = line.match(/^([^#\s]+?)(?:##(?:\+js\()?|#@#|##\^)/);
+  const match = line.match(ublockCosmeticPattern);
   if (!match) return validDomains; // Return empty or domains from network rules
   
   let domainPart = match[1];
