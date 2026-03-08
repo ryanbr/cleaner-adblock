@@ -1420,34 +1420,45 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
   }
 
   // Ping verification for dead domains (if enabled)
-  if (CHECK_PING && deadDomains.length > 0) {
-    console.log(`\nRunning ping checks on ${deadDomains.length} dead domains...`);
-
-    const PING_CONCURRENCY = 10;
-    const alive = new Set();
-    for (let i = 0; i < deadDomains.length; i += PING_CONCURRENCY) {
-      const batch = deadDomains.slice(i, i + PING_CONCURRENCY);
-      const batchResults = await Promise.all(
-        batch.map(async (item) => {
-          const result = await checkPing(item.domain);
-          return { domain: item.domain, ...result };
-        })
-      );
-      for (const r of batchResults) {
-        if (r.alive) {
-          alive.add(r.domain);
-          console.log(`  ${tags.ok} ${r.domain} responds to ping (${r.variant})`);
-        }
+  if (CHECK_PING) {
+    // Move redirecting domains to dead list (old domain is obsolete, no need to ping)
+    if (redirectDomains.length > 0) {
+      console.log(`\nPing: Moving ${redirectDomains.length} redirecting domain(s) to dead list`);
+      for (const r of redirectDomains) {
+        deadDomains.push({ domain: r.domain, reason: `Redirects to ${r.finalDomain}` });
       }
-      console.log(`  Ping: ${Math.min(i + PING_CONCURRENCY, deadDomains.length)}/${deadDomains.length} checked`);
+      redirectDomains.length = 0;
     }
 
-    if (alive.size > 0) {
-      const beforeCount = deadDomains.length;
-      const filtered = deadDomains.filter(item => !alive.has(item.domain));
-      deadDomains.length = 0;
-      deadDomains.push(...filtered);
-      console.log(`Ping: Removed ${beforeCount - deadDomains.length} domain(s) that responded to ping`);
+    if (deadDomains.length > 0) {
+      console.log(`\nRunning ping checks on ${deadDomains.length} dead domains...`);
+
+      const PING_CONCURRENCY = 10;
+      const alive = new Set();
+      for (let i = 0; i < deadDomains.length; i += PING_CONCURRENCY) {
+        const batch = deadDomains.slice(i, i + PING_CONCURRENCY);
+        const batchResults = await Promise.all(
+          batch.map(async (item) => {
+            const result = await checkPing(item.domain);
+            return { domain: item.domain, ...result };
+          })
+        );
+        for (const r of batchResults) {
+          if (r.alive) {
+            alive.add(r.domain);
+            console.log(`  ${tags.ok} ${r.domain} responds to ping (${r.variant})`);
+          }
+        }
+        console.log(`  Ping: ${Math.min(i + PING_CONCURRENCY, deadDomains.length)}/${deadDomains.length} checked`);
+      }
+
+      if (alive.size > 0) {
+        const beforeCount = deadDomains.length;
+        const filtered = deadDomains.filter(item => !alive.has(item.domain));
+        deadDomains.length = 0;
+        deadDomains.push(...filtered);
+        console.log(`Ping: Removed ${beforeCount - deadDomains.length} domain(s) that responded to ping`);
+      }
     }
   }
 
