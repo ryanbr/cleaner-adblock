@@ -796,29 +796,10 @@ async function checkDomain(browser, domainObj, index, total) {
     const variantLabel = variant === original ? '' : ` (trying www.${original})`;
     
     debugVerbose(`Trying variant ${i + 1}/${variants.length}: ${variant}`);
-    
-    const page = await browser.newPage();
-    debugBrowser(`Created new page for ${variant}`);
-    
-    // Set custom Chrome user agent
-    await page.setUserAgent(USER_AGENT);
-    debugBrowser(`Set user agent: ${USER_AGENT}`);
 
-    // Block unnecessary resources if flag is enabled
-    if (BLOCK_RESOURCES) {
-      await page.setRequestInterception(true);
-      page.on('request', (request) => {
-        if (BLOCKED_RESOURCE_TYPES.has(request.resourceType())) {
-          request.abort().catch(() => {});
-        } else {
-          request.continue().catch(() => {});
-        }
-      });
-      debugBrowser(`Resource blocking enabled for ${variant}`);
-    }
-    
     let forceCloseTimer = null;
     let pageClosed = false;
+    let page = null;
 
     const safeClosePage = async (isForceClose = false) => {
       if (pageClosed) return;
@@ -828,13 +809,11 @@ async function checkDomain(browser, domainObj, index, total) {
         console.log(`  ${tags.timeout} Force-closing ${variant} after ${FORCE_CLOSE_TIMEOUT / 1000}s`);
       }
       try {
-        await page.close();
+        if (page) await page.close();
       } catch (e) {
         // Already closed, ignore
       }
     };
-
-    forceCloseTimer = setTimeout(() => safeClosePage(true), FORCE_CLOSE_TIMEOUT);
 
     // Quick disconnect: stop loading once we know the result
     const quickDisconnect = () => {
@@ -842,10 +821,32 @@ async function checkDomain(browser, domainObj, index, total) {
       page.evaluate(() => window.stop()).catch(() => {});
       debugVerbose(`Quick disconnect triggered for ${variant}`);
     };
-    
+
     let mainRequestError = null; // Track main request failure
 
     try {
+      page = await browser.newPage();
+      debugBrowser(`Created new page for ${variant}`);
+
+      // Set custom Chrome user agent
+      await page.setUserAgent(USER_AGENT);
+      debugBrowser(`Set user agent: ${USER_AGENT}`);
+
+      // Block unnecessary resources if flag is enabled
+      if (BLOCK_RESOURCES) {
+        await page.setRequestInterception(true);
+        page.on('request', (request) => {
+          if (BLOCKED_RESOURCE_TYPES.has(request.resourceType())) {
+            request.abort().catch(() => {});
+          } else {
+            request.continue().catch(() => {});
+          }
+        });
+        debugBrowser(`Resource blocking enabled for ${variant}`);
+      }
+
+      forceCloseTimer = setTimeout(() => safeClosePage(true), FORCE_CLOSE_TIMEOUT);
+
       const url = `https://${variant}`;
       if (i === 0) {
         console.log(`[${index + 1}/${total}] Checking ${domain}...${ADD_WWW && variants.length > 1 ? ' (with www fallback)' : ''}`);
@@ -1300,6 +1301,7 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
   
   const browser = await puppeteer.launch({
     headless: true,
+    protocolTimeout: 60000,
     ignoreHTTPSErrors: true, // Ignore SSL/certificate errors
     args: [
       '--no-sandbox',
