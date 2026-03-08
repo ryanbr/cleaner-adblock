@@ -21,6 +21,7 @@ let IGNORED_DOMAINS = [];
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36';
 
 let INPUT_FILE = null; // No default - user must specify input file
+const INPUT_FILES = [];
 let ADD_WWW = false; // Default: don't add www
 let IGNORE_SIMILAR = false; // Default: don't ignore similar domain redirects
 let BLOCK_RESOURCES = true; // Default: block resources for faster scans
@@ -98,60 +99,50 @@ for (const arg of args) {
     QUICK_DISCONNECT = true; cliFlags.add('quickDisconnect');
   } else if (arg.startsWith('--use-config=')) {
     cliFlags.add('useConfig');
-  } else if (!arg.startsWith('-') && !INPUT_FILE) {
+  } else if (!arg.startsWith('-')) {
     // Positional argument (not a flag) - treat as input file
-    INPUT_FILE = arg;
+    INPUT_FILES.push(arg);
   }
 }
+INPUT_FILE = INPUT_FILES[0] || null;
 
 // Load config file (.cleanerconfig or --use-config=<file>)
+let _globalConfig = null;
 const useConfigArg = args.find(a => a.startsWith('--use-config='));
 const CONFIG_FILE = useConfigArg ? useConfigArg.split('=')[1] : '.cleanerconfig';
 try {
   const fs_ = require('fs');
   if (fs_.existsSync(CONFIG_FILE)) {
     const config = JSON.parse(fs_.readFileSync(CONFIG_FILE, 'utf8'));
+    _globalConfig = config;
 
-    // Get per-file overrides if input file matches
-    const inputBasename = INPUT_FILE ? require('path').basename(INPUT_FILE) : null;
-    const fileConfig = (inputBasename && config.files && config.files[inputBasename]) || {};
-
-    // Merge: per-file overrides > global config (CLI flags always win)
-    const merged = { ...config, ...fileConfig };
-
-    // Apply config values only if CLI didn't explicitly set them
-    if (!cliFlags.has('concurrency') && merged.concurrency != null) {
-      CONCURRENCY = Math.max(1, Math.min(50, merged.concurrency));
+    // Apply global config values only if CLI didn't explicitly set them
+    if (!cliFlags.has('concurrency') && config.concurrency != null) {
+      CONCURRENCY = Math.max(1, Math.min(50, config.concurrency));
     }
-    if (!cliFlags.has('addWww') && merged.addWww != null) ADD_WWW = merged.addWww;
-    if (!cliFlags.has('ignoreSimilar') && merged.ignoreSimilar != null) IGNORE_SIMILAR = merged.ignoreSimilar;
-    if (!cliFlags.has('blockResources') && merged.blockResources != null) BLOCK_RESOURCES = merged.blockResources;
-    if (!cliFlags.has('simpleDomains') && merged.simpleDomains != null) SIMPLE_DOMAINS = merged.simpleDomains;
-    if (!cliFlags.has('checkDig') && merged.checkDig != null) CHECK_DIG = merged.checkDig;
-    if (!cliFlags.has('checkDigAlways') && merged.checkDigAlways != null) CHECK_DIG_ALWAYS = merged.checkDigAlways;
-    if (!cliFlags.has('checkPing') && merged.checkPing != null) CHECK_PING = merged.checkPing;
-    if (!cliFlags.has('exportList') && merged.exportList != null) EXPORT_LIST = merged.exportList;
-    if (!cliFlags.has('removeRedirects') && merged.removeRedirects != null) REMOVE_REDIRECTS = merged.removeRedirects;
-    if (!cliFlags.has('quickDisconnect') && merged.quickDisconnect != null) QUICK_DISCONNECT = merged.quickDisconnect;
-    if (!cliFlags.has('localhost') && merged.localhost != null) LOCALHOST_LIST = merged.localhost;
+    if (!cliFlags.has('addWww') && config.addWww != null) ADD_WWW = config.addWww;
+    if (!cliFlags.has('ignoreSimilar') && config.ignoreSimilar != null) IGNORE_SIMILAR = config.ignoreSimilar;
+    if (!cliFlags.has('blockResources') && config.blockResources != null) BLOCK_RESOURCES = config.blockResources;
+    if (!cliFlags.has('simpleDomains') && config.simpleDomains != null) SIMPLE_DOMAINS = config.simpleDomains;
+    if (!cliFlags.has('checkDig') && config.checkDig != null) CHECK_DIG = config.checkDig;
+    if (!cliFlags.has('checkDigAlways') && config.checkDigAlways != null) CHECK_DIG_ALWAYS = config.checkDigAlways;
+    if (!cliFlags.has('checkPing') && config.checkPing != null) CHECK_PING = config.checkPing;
+    if (!cliFlags.has('exportList') && config.exportList != null) EXPORT_LIST = config.exportList;
+    if (!cliFlags.has('removeRedirects') && config.removeRedirects != null) REMOVE_REDIRECTS = config.removeRedirects;
+    if (!cliFlags.has('quickDisconnect') && config.quickDisconnect != null) QUICK_DISCONNECT = config.quickDisconnect;
+    if (!cliFlags.has('localhost') && config.localhost != null) LOCALHOST_LIST = config.localhost;
 
-    // Merge ignored domains (global + per-file, deduplicated)
-    const configIgnored = [
-      ...(config.ignoredDomains || []),
-      ...(fileConfig.ignoredDomains || [])
-    ];
-    if (configIgnored.length > 0) {
-      const combined = new Set([...IGNORED_DOMAINS, ...configIgnored]);
-      IGNORED_DOMAINS = [...combined];
+    // Global ignored domains
+    if (config.ignoredDomains && config.ignoredDomains.length > 0) {
+      IGNORED_DOMAINS = [...new Set([...IGNORED_DOMAINS, ...config.ignoredDomains])];
     }
 
     // Inject --color into argv so colorize.js picks it up at require time
-    if (merged.color && !process.argv.includes('--color') && !process.argv.includes('--colour')) {
+    if (config.color && !process.argv.includes('--color') && !process.argv.includes('--colour')) {
       process.argv.push('--color');
     }
 
-    const hasFileOverrides = inputBasename && config.files && config.files[inputBasename];
-    console.log(`Loaded config from ${CONFIG_FILE}${hasFileOverrides ? ` (with overrides for ${inputBasename})` : ''}`);
+    console.log(`Loaded config from ${CONFIG_FILE}`);
   } else if (useConfigArg) {
     console.error(`Error: Config file not found: ${CONFIG_FILE}`);
     process.exit(1);
@@ -161,6 +152,13 @@ try {
   if (useConfigArg) process.exit(1);
 }
 
+// Save base state (CLI + global config) for multi-file reset
+const BASE_STATE = {
+  CONCURRENCY, ADD_WWW, IGNORE_SIMILAR, BLOCK_RESOURCES, SIMPLE_DOMAINS,
+  CHECK_DIG, CHECK_DIG_ALWAYS, CHECK_PING, EXPORT_LIST, REMOVE_REDIRECTS,
+  QUICK_DISCONNECT, LOCALHOST_LIST, IGNORED_DOMAINS: [...IGNORED_DOMAINS]
+};
+
 // Show help if requested (before loading heavy modules)
 if (args.includes('--help') || args.includes('-h')) {
   console.log(`
@@ -169,7 +167,7 @@ Minimal Domain Scanner v2.0
 Scans filter lists to find dead/redirecting domains.
 
 Usage:
-  node cleaner-adblock.js <file> [options]
+  node cleaner-adblock.js <file1> [file2] [file3] [options]
 
 Options:
   --input=<file>        Input file to scan (alternative to positional arg)
@@ -365,8 +363,13 @@ function parseLocalhostLine(line) {
 }
 
 // Check if a domain should be ignored (including subdomains)
-const IGNORED_DOMAINS_SET = new Set(IGNORED_DOMAINS);
-const IGNORED_DOMAIN_SUFFIXES = IGNORED_DOMAINS.map(d => '.' + d);
+let IGNORED_DOMAINS_SET = new Set(IGNORED_DOMAINS);
+let IGNORED_DOMAIN_SUFFIXES = IGNORED_DOMAINS.map(d => '.' + d);
+
+function rebuildIgnoredDomains() {
+  IGNORED_DOMAINS_SET = new Set(IGNORED_DOMAINS);
+  IGNORED_DOMAIN_SUFFIXES = IGNORED_DOMAINS.map(d => '.' + d);
+}
 
 function shouldIgnoreDomain(domain) {
   if (IGNORED_DOMAINS_SET.has(domain)) return true;
@@ -376,6 +379,60 @@ function shouldIgnoreDomain(domain) {
     }
   }
   return false;
+}
+
+// Apply per-file config overrides for multi-file processing
+function applyConfigForFile(filename) {
+  // Reset to base state (CLI + global config)
+  CONCURRENCY = BASE_STATE.CONCURRENCY;
+  ADD_WWW = BASE_STATE.ADD_WWW;
+  IGNORE_SIMILAR = BASE_STATE.IGNORE_SIMILAR;
+  BLOCK_RESOURCES = BASE_STATE.BLOCK_RESOURCES;
+  SIMPLE_DOMAINS = BASE_STATE.SIMPLE_DOMAINS;
+  CHECK_DIG = BASE_STATE.CHECK_DIG;
+  CHECK_DIG_ALWAYS = BASE_STATE.CHECK_DIG_ALWAYS;
+  CHECK_PING = BASE_STATE.CHECK_PING;
+  EXPORT_LIST = BASE_STATE.EXPORT_LIST;
+  REMOVE_REDIRECTS = BASE_STATE.REMOVE_REDIRECTS;
+  QUICK_DISCONNECT = BASE_STATE.QUICK_DISCONNECT;
+  LOCALHOST_LIST = BASE_STATE.LOCALHOST_LIST;
+  IGNORED_DOMAINS = [...BASE_STATE.IGNORED_DOMAINS];
+
+  if (!_globalConfig || !_globalConfig.files) {
+    rebuildIgnoredDomains();
+    return;
+  }
+
+  const fileConfig = _globalConfig.files[filename] || {};
+  if (Object.keys(fileConfig).length === 0) {
+    rebuildIgnoredDomains();
+    return;
+  }
+
+  console.log(`Applying config overrides for ${filename}`);
+
+  // Apply per-file overrides (only if CLI didn't set)
+  if (!cliFlags.has('concurrency') && fileConfig.concurrency != null) {
+    CONCURRENCY = Math.max(1, Math.min(50, fileConfig.concurrency));
+  }
+  if (!cliFlags.has('addWww') && fileConfig.addWww != null) ADD_WWW = fileConfig.addWww;
+  if (!cliFlags.has('ignoreSimilar') && fileConfig.ignoreSimilar != null) IGNORE_SIMILAR = fileConfig.ignoreSimilar;
+  if (!cliFlags.has('blockResources') && fileConfig.blockResources != null) BLOCK_RESOURCES = fileConfig.blockResources;
+  if (!cliFlags.has('simpleDomains') && fileConfig.simpleDomains != null) SIMPLE_DOMAINS = fileConfig.simpleDomains;
+  if (!cliFlags.has('checkDig') && fileConfig.checkDig != null) CHECK_DIG = fileConfig.checkDig;
+  if (!cliFlags.has('checkDigAlways') && fileConfig.checkDigAlways != null) CHECK_DIG_ALWAYS = fileConfig.checkDigAlways;
+  if (!cliFlags.has('checkPing') && fileConfig.checkPing != null) CHECK_PING = fileConfig.checkPing;
+  if (!cliFlags.has('exportList') && fileConfig.exportList != null) EXPORT_LIST = fileConfig.exportList;
+  if (!cliFlags.has('removeRedirects') && fileConfig.removeRedirects != null) REMOVE_REDIRECTS = fileConfig.removeRedirects;
+  if (!cliFlags.has('quickDisconnect') && fileConfig.quickDisconnect != null) QUICK_DISCONNECT = fileConfig.quickDisconnect;
+  if (!cliFlags.has('localhost') && fileConfig.localhost != null) LOCALHOST_LIST = fileConfig.localhost;
+
+  // Merge per-file ignored domains with global
+  if (fileConfig.ignoredDomains && fileConfig.ignoredDomains.length > 0) {
+    IGNORED_DOMAINS = [...new Set([...IGNORED_DOMAINS, ...fileConfig.ignoredDomains])];
+  }
+
+  rebuildIgnoredDomains();
 }
 
 // Extract domains from uBlock Origin and Adguard style rule lines
@@ -1222,110 +1279,17 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
 // Main execution
 (async () => {
   console.log('=== Minimal Domain Scanner v2.0 ===\n');
-  
-  // Generate timestamp once for consistent dating across both files
-  const SCAN_TIMESTAMP = new Date().toISOString();
-  const FILENAME_TIMESTAMP = SCAN_TIMESTAMP.replace(/:/g, '-').replace(/\..+/, ''); // 2024-11-19T12-34-56
-  
-  // Set filenames with input file name and timestamp
-  const inputBasename = INPUT_FILE ? require('path').basename(INPUT_FILE, require('path').extname(INPUT_FILE)) : '';
-  const fileLabel = inputBasename ? `${inputBasename}_` : '';
-  DEAD_DOMAINS_FILE = `dead_domains_${fileLabel}${FILENAME_TIMESTAMP}.txt`;
-  REDIRECT_DOMAINS_FILE = `redirect_domains_${fileLabel}${FILENAME_TIMESTAMP}.txt`;
-  
-  console.log(`Output files will be:`);
-  console.log(`  Dead domains: ${DEAD_DOMAINS_FILE}`);
-  console.log(`  Redirect domains: ${REDIRECT_DOMAINS_FILE}\n`);
 
-  // Check if input file is specified
-  if (!INPUT_FILE) {
+  // Check if any input files are specified
+  if (INPUT_FILES.length === 0) {
     console.error(`${tags.error} No input file specified`);
-    console.log('Usage: node cleaner-adblock.js <file> [options]');
+    console.log('Usage: node cleaner-adblock.js <file1> [file2] [file3] [options]');
     console.log('Example: node cleaner-adblock.js my_rules.txt');
-    console.log('Example: node cleaner-adblock.js domains.txt --simple-domains');
+    console.log('Example: node cleaner-adblock.js file1.txt file2.txt --add-www');
     console.log('\nUse --help for more information.\n');
     process.exit(1);
   }
-  
-  console.log(`Input file: ${INPUT_FILE}`);
-  if (SIMPLE_DOMAINS) {
-    console.log(`--simple-domains enabled: Parsing as simple domain list`);
-  }
-  if (CHECK_DIG_ALWAYS) {
-    console.log(`--check-dig-always enabled: Only reporting domains with NO DNS A records`);
-  }
-  if (ADD_WWW) {
-    console.log(`--add-www enabled: Will check both domain.com and www.domain.com for bare domains`);
-  }
-  if (CHECK_PING) {
-    console.log(`--check-ping enabled: Will verify dead domains with ping before confirming`);
-  }
-  if (REMOVE_REDIRECTS) {
-    console.log(`--remove-redirects enabled: Redirected domains will always be removed`);
-  }
-  if (!BLOCK_RESOURCES) {
-    console.log(`--disable-block-resources: Loading images/CSS/fonts/media (slower scans)`);
-  }
-  if (DEBUG) {
-    console.log(`Debug mode enabled:`);
-    console.log(`  Basic debug: ${DEBUG}`);
-    console.log(`  Verbose debug: ${DEBUG_VERBOSE}`);
-    console.log(`  Network debug: ${DEBUG_NETWORK}`);
-    console.log(`  Browser debug: ${DEBUG_BROWSER}`);
-  }
-  if (TEST_MODE) {
-    console.log(`Test mode enabled: Only checking first ${TEST_COUNT} domains`);
-  }
-  console.log(`Reading domains from ${INPUT_FILE}...`);
-  
-  let domains;
-  try {
-    domains = parseDomainsFromFile(INPUT_FILE);
-  } catch (error) {
-    console.error(`\n${tags.error} ${error.message}`);
-    console.log(`\nPlease check that the file '${INPUT_FILE}' exists and is readable.\n`);
-    process.exit(1);
-  }
-  
-  console.log(`Found ${domains.length} unique domains to check\n`);
-  
-  // Filter out ignored domains
-  if (IGNORED_DOMAINS.length > 0) {
-    const kept = [];
-    const ignored = [];
-    for (const domain of domains) {
-      if (shouldIgnoreDomain(domain)) {
-        ignored.push(domain);
-      } else {
-        kept.push(domain);
-      }
-    }
-    const ignoredCount = ignored.length;
-    domains = kept;
-    if (ignoredCount > 0) {
-      console.log(`Ignored ${ignoredCount} domain(s) from IGNORED_DOMAINS list`);
-      if (DEBUG) {
-        console.log(`Ignored domains: ${ignored.join(', ')}`);
-      }
-      console.log(`Remaining domains to check: ${domains.length}\n`);
-    }
-  }
-  
-  // Apply test mode if enabled
-  if (TEST_MODE && domains.length > TEST_COUNT) {
-    console.log(`TEST MODE: Limiting to first ${TEST_COUNT} domains (from ${domains.length} total)\n`);
-    domains = domains.slice(0, TEST_COUNT);
-  }
-  
-  // Expand domains with www variants if --add-www is enabled
-  const domainObjects = expandDomainsWithWww(domains);
-  const totalChecks = domainObjects.reduce((sum, obj) => sum + obj.variants.length, 0);
-  
-  if (ADD_WWW) {
-    const withWww = domainObjects.filter(obj => obj.variants.length > 1).length;
-    console.log(`Expanded to ${totalChecks} total checks (${withWww} domains will try www variant)\n`);
-  }
-  
+
   const browser = await puppeteer.launch({
     headless: true,
     protocolTimeout: 60000,
@@ -1376,156 +1340,263 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
   process.on('SIGINT', () => shutdown('SIGINT'));
   process.on('SIGTERM', () => shutdown('SIGTERM'));
 
-  const results = await processDomains(browser, domainObjects);
-  
+  // Process each input file sequentially
+  for (let fileIdx = 0; fileIdx < INPUT_FILES.length; fileIdx++) {
+    if (shuttingDown) break;
+
+    INPUT_FILE = INPUT_FILES[fileIdx];
+    const inputBasename = path.basename(INPUT_FILE);
+    applyConfigForFile(inputBasename);
+
+    if (INPUT_FILES.length > 1) {
+      console.log(`\n${'='.repeat(50)}`);
+      console.log(`Processing file ${fileIdx + 1}/${INPUT_FILES.length}: ${INPUT_FILE}`);
+      console.log(`${'='.repeat(50)}\n`);
+    }
+
+    // Generate timestamp for this file
+    const SCAN_TIMESTAMP = new Date().toISOString();
+    const FILENAME_TIMESTAMP = SCAN_TIMESTAMP.replace(/:/g, '-').replace(/\..+/, '');
+
+    const baseName = path.basename(INPUT_FILE, path.extname(INPUT_FILE));
+    const fileLabel = baseName ? `${baseName}_` : '';
+    DEAD_DOMAINS_FILE = `dead_domains_${fileLabel}${FILENAME_TIMESTAMP}.txt`;
+    REDIRECT_DOMAINS_FILE = `redirect_domains_${fileLabel}${FILENAME_TIMESTAMP}.txt`;
+
+    console.log(`Output files will be:`);
+    console.log(`  Dead domains: ${DEAD_DOMAINS_FILE}`);
+    console.log(`  Redirect domains: ${REDIRECT_DOMAINS_FILE}\n`);
+
+    console.log(`Input file: ${INPUT_FILE}`);
+    if (SIMPLE_DOMAINS) {
+      console.log(`--simple-domains enabled: Parsing as simple domain list`);
+    }
+    if (CHECK_DIG_ALWAYS) {
+      console.log(`--check-dig-always enabled: Only reporting domains with NO DNS A records`);
+    }
+    if (ADD_WWW) {
+      console.log(`--add-www enabled: Will check both domain.com and www.domain.com for bare domains`);
+    }
+    if (CHECK_PING) {
+      console.log(`--check-ping enabled: Will verify dead domains with ping before confirming`);
+    }
+    if (REMOVE_REDIRECTS) {
+      console.log(`--remove-redirects enabled: Redirected domains will always be removed`);
+    }
+    if (!BLOCK_RESOURCES) {
+      console.log(`--disable-block-resources: Loading images/CSS/fonts/media (slower scans)`);
+    }
+    if (DEBUG) {
+      console.log(`Debug mode enabled:`);
+      console.log(`  Basic debug: ${DEBUG}`);
+      console.log(`  Verbose debug: ${DEBUG_VERBOSE}`);
+      console.log(`  Network debug: ${DEBUG_NETWORK}`);
+      console.log(`  Browser debug: ${DEBUG_BROWSER}`);
+    }
+    if (TEST_MODE) {
+      console.log(`Test mode enabled: Only checking first ${TEST_COUNT} domains`);
+    }
+    console.log(`Reading domains from ${INPUT_FILE}...`);
+
+    let domains;
+    try {
+      domains = parseDomainsFromFile(INPUT_FILE);
+    } catch (error) {
+      console.error(`\n${tags.error} ${error.message}`);
+      console.log(`\nPlease check that the file '${INPUT_FILE}' exists and is readable.\n`);
+      if (INPUT_FILES.length === 1) process.exit(1);
+      continue; // Skip to next file
+    }
+
+    console.log(`Found ${domains.length} unique domains to check\n`);
+
+    // Filter out ignored domains
+    if (IGNORED_DOMAINS.length > 0) {
+      const kept = [];
+      const ignored = [];
+      for (const domain of domains) {
+        if (shouldIgnoreDomain(domain)) {
+          ignored.push(domain);
+        } else {
+          kept.push(domain);
+        }
+      }
+      const ignoredCount = ignored.length;
+      domains = kept;
+      if (ignoredCount > 0) {
+        console.log(`Ignored ${ignoredCount} domain(s) from IGNORED_DOMAINS list`);
+        if (DEBUG) {
+          console.log(`Ignored domains: ${ignored.join(', ')}`);
+        }
+        console.log(`Remaining domains to check: ${domains.length}\n`);
+      }
+    }
+
+    // Apply test mode if enabled
+    if (TEST_MODE && domains.length > TEST_COUNT) {
+      console.log(`TEST MODE: Limiting to first ${TEST_COUNT} domains (from ${domains.length} total)\n`);
+      domains = domains.slice(0, TEST_COUNT);
+    }
+
+    // Expand domains with www variants if --add-www is enabled
+    const domainObjects = expandDomainsWithWww(domains);
+    const totalChecks = domainObjects.reduce((sum, obj) => sum + obj.variants.length, 0);
+
+    if (ADD_WWW) {
+      const withWww = domainObjects.filter(obj => obj.variants.length > 1).length;
+      console.log(`Expanded to ${totalChecks} total checks (${withWww} domains will try www variant)\n`);
+    }
+
+    const results = await processDomains(browser, domainObjects);
+
+    // Separate results by type
+    const deadDomains = [];
+    const redirectDomains = [];
+    for (const r of results) {
+      if (r.type === 'dead') deadDomains.push(r.data);
+      else if (r.type === 'redirect') redirectDomains.push(r.data);
+    }
+
+    // Batch DNS checks for all dead domains (if enabled)
+    if ((CHECK_DIG || CHECK_DIG_ALWAYS) && deadDomains.length > 0) {
+      // Only check DNS for connection errors (not HTTP errors like 404)
+      const domainsToCheck = deadDomains.filter(item =>
+        !item.statusCode || item.reason.includes('ERR_') || item.reason.includes('timeout')
+      );
+      console.log(`\n${tags.dns} Running checks on ${domainsToCheck.length} dead domains...`);
+
+      const DNS_CONCURRENCY = 10;
+      const dnsChecks = [];
+      for (let i = 0; i < domainsToCheck.length; i += DNS_CONCURRENCY) {
+        const batch = domainsToCheck.slice(i, i + DNS_CONCURRENCY);
+        const batchResults = await Promise.all(
+          batch.map(async (item) => {
+            const dnsCheck = await checkDNSRecord(item.domain);
+            return { domain: item.domain, dnsInfo: dnsCheck };
+          })
+        );
+        dnsChecks.push(...batchResults);
+        console.log(`  DNS: ${Math.min(i + DNS_CONCURRENCY, domainsToCheck.length)}/${domainsToCheck.length} checked`);
+      }
+
+      // Create a map for quick lookup
+      const dnsMap = new Map(dnsChecks.map(check => [check.domain, check.dnsInfo]));
+
+      // Add DNS info to each dead domain
+      for (const item of deadDomains) {
+        item.dnsInfo = dnsMap.get(item.domain);
+      }
+
+      // If --check-dig-always, filter out domains with DNS records
+      if (CHECK_DIG_ALWAYS) {
+        const beforeCount = deadDomains.length;
+        const filteredDomains = deadDomains.filter(item =>
+          item.dnsInfo && !item.dnsInfo.hasRecord
+        );
+        const removedCount = beforeCount - filteredDomains.length;
+
+        if (removedCount > 0) {
+          console.log(`${tags.dns} Filtered out ${removedCount} domain(s) with valid A records`);
+        }
+
+        // Replace deadDomains array
+        deadDomains.length = 0;
+        deadDomains.push(...filteredDomains);
+      }
+
+      console.log(`${tags.dns} Checks completed\n`);
+    }
+
+    // Capture redirect count before --check-ping may clear the array
+    let redirectCount = redirectDomains.length;
+
+    // Ping verification for dead domains (if enabled)
+    if (CHECK_PING) {
+      // Only ping domains with connection-level failures, not HTTP errors (404/5xx have a running server)
+      const domainsToPing = deadDomains.filter(item =>
+        !item.statusCode || item.reason.includes('ERR_') || item.reason.includes('timeout')
+      );
+
+      if (domainsToPing.length > 0) {
+        console.log(`\nRunning ping checks on ${domainsToPing.length} dead domains (skipping ${deadDomains.length - domainsToPing.length} with HTTP errors)...`);
+
+        const PING_CONCURRENCY = 10;
+        const alive = new Set();
+        for (let i = 0; i < domainsToPing.length; i += PING_CONCURRENCY) {
+          const batch = domainsToPing.slice(i, i + PING_CONCURRENCY);
+          const batchResults = await Promise.all(
+            batch.map(async (item) => {
+              const result = await checkPing(item.domain);
+              return { domain: item.domain, ...result };
+            })
+          );
+          for (const r of batchResults) {
+            if (r.alive) {
+              alive.add(r.domain);
+              console.log(`  ${tags.ok} ${r.domain} responds to ping (${r.variant})`);
+            }
+          }
+          console.log(`  Ping: ${Math.min(i + PING_CONCURRENCY, domainsToPing.length)}/${domainsToPing.length} checked`);
+        }
+
+        if (alive.size > 0) {
+          const beforeCount = deadDomains.length;
+          const filtered = deadDomains.filter(item => !alive.has(item.domain));
+          deadDomains.length = 0;
+          deadDomains.push(...filtered);
+          console.log(`Ping: Removed ${beforeCount - deadDomains.length} domain(s) that responded to ping`);
+        }
+      }
+
+      // Write redirect file first, then move redirecting domains to dead list
+      if (redirectDomains.length > 0) {
+        writeRedirectDomains(redirectDomains, SCAN_TIMESTAMP, INPUT_FILE);
+        console.log(`Ping: Moving ${redirectDomains.length} redirecting domain(s) to dead list`);
+        for (const r of redirectDomains) {
+          deadDomains.push({ domain: r.domain, reason: `Redirects to ${r.finalDomain}` });
+        }
+        redirectDomains.length = 0;
+      }
+    }
+
+    console.log(`\n=== Summary${INPUT_FILES.length > 1 ? ` (${INPUT_FILE})` : ''} ===`);
+    console.log(`Total domains checked: ${domains.length}`);
+    console.log(`Dead/non-existent: ${deadDomains.length}`);
+    console.log(`Redirecting: ${redirectCount}`);
+    console.log(`Active (no issues): ${domains.length - deadDomains.length - redirectCount}`);
+
+    if (deadDomains.length > 0) {
+      writeDeadDomains(deadDomains, SCAN_TIMESTAMP, INPUT_FILE);
+      console.log(`\n${tags.tip} Remove these ${deadDomains.length} dead domains from your filter list`);
+    } else {
+      console.log(`\n${tags.ok} No dead domains found`);
+    }
+
+    if (redirectDomains.length > 0) {
+      writeRedirectDomains(redirectDomains, SCAN_TIMESTAMP, INPUT_FILE);
+      console.log(`\n${tags.tip} Review these ${redirectCount} redirecting domains - they may need rule updates`);
+    } else if (redirectCount > 0) {
+      console.log(`\n${tags.ok} ${redirectCount} redirecting domains moved to dead list (see redirect file)`);
+    } else {
+      console.log(`${tags.ok} No redirecting domains found`);
+    }
+
+    // Export cleaned list if requested
+    if (EXPORT_LIST && (deadDomains.length > 0 || redirectDomains.length > 0)) {
+      const exportedFile = exportCleanedList(INPUT_FILE, deadDomains, redirectDomains, IGNORE_SIMILAR, REMOVE_REDIRECTS);
+      if (exportedFile === null) {
+        console.error(`${tags.error} Failed to export cleaned filter list`);
+      }
+    }
+  }
+
   // Ensure browser closes properly
   try {
     await browser.close();
     debugBrowser('Browser closed successfully');
   } catch (error) {
     console.error(`Warning: Error closing browser: ${error.message}`);
-    // Force exit if browser won't close within 5 seconds
     setTimeout(() => process.exit(1), 5000);
-  }
-  
-  // Separate results by type
-  const deadDomains = [];
-  const redirectDomains = [];
-  for (const r of results) {
-    if (r.type === 'dead') deadDomains.push(r.data);
-    else if (r.type === 'redirect') redirectDomains.push(r.data);
-  }
-  
-  // Batch DNS checks for all dead domains (if enabled)
-  if ((CHECK_DIG || CHECK_DIG_ALWAYS) && deadDomains.length > 0) {
-    // Only check DNS for connection errors (not HTTP errors like 404)
-    const domainsToCheck = deadDomains.filter(item => 
-      !item.statusCode || item.reason.includes('ERR_') || item.reason.includes('timeout')
-    );
-    console.log(`\n${tags.dns} Running checks on ${domainsToCheck.length} dead domains...`);
-    
-    const DNS_CONCURRENCY = 10;
-    const dnsChecks = [];
-    for (let i = 0; i < domainsToCheck.length; i += DNS_CONCURRENCY) {
-      const batch = domainsToCheck.slice(i, i + DNS_CONCURRENCY);
-      const batchResults = await Promise.all(
-        batch.map(async (item) => {
-          const dnsCheck = await checkDNSRecord(item.domain);
-          return { domain: item.domain, dnsInfo: dnsCheck };
-        })
-      );
-      dnsChecks.push(...batchResults);
-      console.log(`  DNS: ${Math.min(i + DNS_CONCURRENCY, domainsToCheck.length)}/${domainsToCheck.length} checked`);
-    }
-    
-    // Create a map for quick lookup
-    const dnsMap = new Map(dnsChecks.map(check => [check.domain, check.dnsInfo]));
-    
-    // Add DNS info to each dead domain
-    for (const item of deadDomains) {
-      item.dnsInfo = dnsMap.get(item.domain);
-    }
-    
-    // If --check-dig-always, filter out domains with DNS records
-    if (CHECK_DIG_ALWAYS) {
-      const beforeCount = deadDomains.length;
-      const filteredDomains = deadDomains.filter(item => 
-        item.dnsInfo && !item.dnsInfo.hasRecord
-      );
-      const removedCount = beforeCount - filteredDomains.length;
-      
-      if (removedCount > 0) {
-        console.log(`${tags.dns} Filtered out ${removedCount} domain(s) with valid A records`);
-      }
-      
-      // Replace deadDomains array
-      deadDomains.length = 0;
-      deadDomains.push(...filteredDomains);
-   }
-    
-    console.log(`${tags.dns} Checks completed\n`);
-  }
-
-  // Capture redirect count before --check-ping may clear the array
-  let redirectCount = redirectDomains.length;
-
-  // Ping verification for dead domains (if enabled)
-  if (CHECK_PING) {
-    // Only ping domains with connection-level failures, not HTTP errors (404/5xx have a running server)
-    const domainsToPing = deadDomains.filter(item =>
-      !item.statusCode || item.reason.includes('ERR_') || item.reason.includes('timeout')
-    );
-
-    if (domainsToPing.length > 0) {
-      console.log(`\nRunning ping checks on ${domainsToPing.length} dead domains (skipping ${deadDomains.length - domainsToPing.length} with HTTP errors)...`);
-
-      const PING_CONCURRENCY = 10;
-      const alive = new Set();
-      for (let i = 0; i < domainsToPing.length; i += PING_CONCURRENCY) {
-        const batch = domainsToPing.slice(i, i + PING_CONCURRENCY);
-        const batchResults = await Promise.all(
-          batch.map(async (item) => {
-            const result = await checkPing(item.domain);
-            return { domain: item.domain, ...result };
-          })
-        );
-        for (const r of batchResults) {
-          if (r.alive) {
-            alive.add(r.domain);
-            console.log(`  ${tags.ok} ${r.domain} responds to ping (${r.variant})`);
-          }
-        }
-        console.log(`  Ping: ${Math.min(i + PING_CONCURRENCY, domainsToPing.length)}/${domainsToPing.length} checked`);
-      }
-
-      if (alive.size > 0) {
-        const beforeCount = deadDomains.length;
-        const filtered = deadDomains.filter(item => !alive.has(item.domain));
-        deadDomains.length = 0;
-        deadDomains.push(...filtered);
-        console.log(`Ping: Removed ${beforeCount - deadDomains.length} domain(s) that responded to ping`);
-      }
-    }
-
-    // Write redirect file first, then move redirecting domains to dead list
-    if (redirectDomains.length > 0) {
-      writeRedirectDomains(redirectDomains, SCAN_TIMESTAMP, INPUT_FILE);
-      console.log(`Ping: Moving ${redirectDomains.length} redirecting domain(s) to dead list`);
-      for (const r of redirectDomains) {
-        deadDomains.push({ domain: r.domain, reason: `Redirects to ${r.finalDomain}` });
-      }
-      redirectDomains.length = 0;
-    }
-  }
-
-  console.log(`\n=== Summary ===`);
-  console.log(`Total domains checked: ${domains.length}`);
-  console.log(`Dead/non-existent: ${deadDomains.length}`);
-  console.log(`Redirecting: ${redirectCount}`);
-  console.log(`Active (no issues): ${domains.length - deadDomains.length - redirectCount}`);
-
-  if (deadDomains.length > 0) {
-    writeDeadDomains(deadDomains, SCAN_TIMESTAMP, INPUT_FILE);
-    console.log(`\n${tags.tip} Remove these ${deadDomains.length} dead domains from your filter list`);
-  } else {
-    console.log(`\n${tags.ok} No dead domains found`);
-  }
-
-  if (redirectDomains.length > 0) {
-    writeRedirectDomains(redirectDomains, SCAN_TIMESTAMP, INPUT_FILE);
-    console.log(`\n${tags.tip} Review these ${redirectCount} redirecting domains - they may need rule updates`);
-  } else if (redirectCount > 0) {
-    console.log(`\n${tags.ok} ${redirectCount} redirecting domains moved to dead list (see redirect file)`);
-  } else {
-    console.log(`${tags.ok} No redirecting domains found`);
-  }
-  
-  // Export cleaned list if requested
-  if (EXPORT_LIST && (deadDomains.length > 0 || redirectDomains.length > 0)) {
-    const exportedFile = exportCleanedList(INPUT_FILE, deadDomains, redirectDomains, IGNORE_SIMILAR, REMOVE_REDIRECTS);
-    if (exportedFile === null) {
-      console.error(`${tags.error} Failed to export cleaned filter list`);
-    }
   }
 
   process.exit(0);
