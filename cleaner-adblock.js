@@ -23,7 +23,6 @@ const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
 let INPUT_FILE = null; // No default - user must specify input file
 let ADD_WWW = false; // Default: don't add www
 let IGNORE_SIMILAR = false; // Default: don't ignore similar domain redirects
-let IGNORE_NAV_TIMEOUT = false; // Default: don't ignore navigation timeouts
 let BLOCK_RESOURCES = true; // Default: block resources for faster scans
 let SIMPLE_DOMAINS = false; // New option: parse as simple domain list
 let CHECK_DIG = false; // Default: don't check DNS A records
@@ -53,8 +52,6 @@ for (const arg of args) {
     ADD_WWW = true; cliFlags.add('addWww');
   } else if (arg === '--ignore-similar') {
     IGNORE_SIMILAR = true; cliFlags.add('ignoreSimilar');
-  } else if (arg === '--ignore-nav-timeout') {
-    IGNORE_NAV_TIMEOUT = true;
   } else if (arg === '--disable-block-resources') {
     BLOCK_RESOURCES = false; cliFlags.add('blockResources');
   } else if (arg === '--simple-domains') {
