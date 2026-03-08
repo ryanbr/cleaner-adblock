@@ -366,12 +366,12 @@ function parseLocalhostLine(line) {
 
 // Check if a domain should be ignored (including subdomains)
 const IGNORED_DOMAINS_SET = new Set(IGNORED_DOMAINS);
+const IGNORED_DOMAIN_SUFFIXES = IGNORED_DOMAINS.map(d => '.' + d);
 
 function shouldIgnoreDomain(domain) {
   if (IGNORED_DOMAINS_SET.has(domain)) return true;
-  for (const ignoredDomain of IGNORED_DOMAINS) {
-    // Subdomain match (e.g., consent.yahoo.com matches yahoo.com)
-    if (domain.endsWith('.' + ignoredDomain)) {
+  for (const suffix of IGNORED_DOMAIN_SUFFIXES) {
+    if (domain.endsWith(suffix)) {
       return true;
     }
   }
