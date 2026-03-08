@@ -1408,13 +1408,18 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
 
   // Ping verification for dead domains (if enabled)
   if (CHECK_PING) {
-    if (deadDomains.length > 0) {
-      console.log(`\nRunning ping checks on ${deadDomains.length} dead domains...`);
+    // Only ping domains with connection-level failures, not HTTP errors (404/5xx have a running server)
+    const domainsToPing = deadDomains.filter(item =>
+      !item.statusCode || item.reason.includes('ERR_') || item.reason.includes('timeout')
+    );
+
+    if (domainsToPing.length > 0) {
+      console.log(`\nRunning ping checks on ${domainsToPing.length} dead domains (skipping ${deadDomains.length - domainsToPing.length} with HTTP errors)...`);
 
       const PING_CONCURRENCY = 10;
       const alive = new Set();
-      for (let i = 0; i < deadDomains.length; i += PING_CONCURRENCY) {
-        const batch = deadDomains.slice(i, i + PING_CONCURRENCY);
+      for (let i = 0; i < domainsToPing.length; i += PING_CONCURRENCY) {
+        const batch = domainsToPing.slice(i, i + PING_CONCURRENCY);
         const batchResults = await Promise.all(
           batch.map(async (item) => {
             const result = await checkPing(item.domain);
@@ -1427,7 +1432,7 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
             console.log(`  ${tags.ok} ${r.domain} responds to ping (${r.variant})`);
           }
         }
-        console.log(`  Ping: ${Math.min(i + PING_CONCURRENCY, deadDomains.length)}/${deadDomains.length} checked`);
+        console.log(`  Ping: ${Math.min(i + PING_CONCURRENCY, domainsToPing.length)}/${domainsToPing.length} checked`);
       }
 
       if (alive.size > 0) {
