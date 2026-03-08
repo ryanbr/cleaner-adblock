@@ -1096,48 +1096,28 @@ async function checkDomain(browser, domainObj, index, total) {
 async function processDomains(browser, domainObjects) {
   const results = [];
   const total = domainObjects.length;
-  
+  let nextIndex = 0;
+
   debugVerbose(`Starting to process ${total} domains with concurrency ${CONCURRENCY}`);
-  
-  for (let i = 0; i < domainObjects.length; i += CONCURRENCY) {
-    const batch = domainObjects.slice(i, i + CONCURRENCY);
-    const batchNumber = Math.floor(i / CONCURRENCY) + 1;
-    const totalBatches = Math.ceil(domainObjects.length / CONCURRENCY);
-    
-    debugVerbose(`Processing batch ${batchNumber}/${totalBatches} (${batch.length} domains)`);
-    
-    const batchResults = await Promise.all(
-      batch.map((domainObj, batchIndex) => 
-        checkDomain(browser, domainObj, i + batchIndex, total)
-      )
-    );
-    
-    results.push(...batchResults.filter(r => r !== null && r.type !== null));
-    
-    // Cleanup: verify all pages are closed after each batch
-    const pages = await browser.pages();
-    const openPages = pages.length;
-    
-    debugBrowser(`After batch ${batchNumber}: ${openPages} pages open`);
-    
-    if (openPages > 1) {
-      debugVerbose(`Found ${openPages - 1} lingering pages, closing...`);
-      for (const page of pages) {
-        if (page.url() !== 'about:blank') {
-          try {
-            await page.close();
-            debugBrowser(`Closed lingering page: ${page.url()}`);
-          } catch (e) {
-            debugBrowser(`Failed to close page: ${e.message}`);
-          }
-        }
+
+  async function worker() {
+    while (nextIndex < total) {
+      if (shuttingDown) break;
+      const index = nextIndex++;
+      const result = await checkDomain(browser, domainObjects[index], index, total);
+      if (result !== null && result.type !== null) {
+        results.push(result);
       }
     }
-    
-    debugVerbose(`Batch ${batchNumber} completed`);
   }
-  
-  debugVerbose(`All batches completed. Total results: ${results.length}`);
+
+  const workers = Array.from(
+    { length: Math.min(CONCURRENCY, total) },
+    () => worker()
+  );
+  await Promise.all(workers);
+
+  debugVerbose(`All domains completed. Total results: ${results.length}`);
   return results;
 }
 
