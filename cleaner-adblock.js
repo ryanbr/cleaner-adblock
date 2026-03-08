@@ -862,11 +862,12 @@ async function checkDNSRecord(domain) {
 const BLOCKED_RESOURCE_TYPES = new Set(['image', 'stylesheet', 'font', 'media']);
 
 function extractDomainFromUrl(urlStr) {
-  try {
-    return new URL(urlStr).hostname.replace(/^www\./, '');
-  } catch {
-    return urlStr;
-  }
+  const start = urlStr.indexOf('://');
+  if (start === -1) return urlStr;
+  const hostStart = start + 3;
+  const slashIdx = urlStr.indexOf('/', hostStart);
+  const host = slashIdx > 0 ? urlStr.substring(hostStart, slashIdx) : urlStr.substring(hostStart);
+  return host.startsWith('www.') ? host.substring(4) : host;
 }
 
 // Check if domain is dead or redirecting
