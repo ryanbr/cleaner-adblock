@@ -767,6 +767,8 @@ async function checkDNSRecord(domain) {
   }
 }
 
+const BLOCKED_RESOURCE_TYPES = new Set(['image', 'stylesheet', 'font', 'media']);
+
 // Check if domain is dead or redirecting
 // domainObj format: { original: 'domain.com', variants: ['domain.com', 'www.domain.com'] }
 async function checkDomain(browser, domainObj, index, total) {
@@ -798,10 +800,9 @@ async function checkDomain(browser, domainObj, index, total) {
 
     // Block unnecessary resources if flag is enabled
     if (BLOCK_RESOURCES) {
-      const blockedTypes = new Set(['image', 'stylesheet', 'font', 'media']);
       await page.setRequestInterception(true);
       page.on('request', (request) => {
-        if (blockedTypes.has(request.resourceType())) {
+        if (BLOCKED_RESOURCE_TYPES.has(request.resourceType())) {
           request.abort().catch(() => {});
         } else {
           request.continue().catch(() => {});
