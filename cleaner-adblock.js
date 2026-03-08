@@ -1402,6 +1402,9 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
     console.log(`${tags.dns} Checks completed\n`);
   }
 
+  // Capture redirect count before --check-ping may clear the array
+  let redirectCount = redirectDomains.length;
+
   // Ping verification for dead domains (if enabled)
   if (CHECK_PING) {
     // Only ping domains with connection-level failures, not HTTP errors (404/5xx have a running server)
@@ -1454,19 +1457,21 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
   console.log(`\n=== Summary ===`);
   console.log(`Total domains checked: ${domains.length}`);
   console.log(`Dead/non-existent: ${deadDomains.length}`);
-  console.log(`Redirecting: ${redirectDomains.length}`);
-  console.log(`Active (no issues): ${domains.length - deadDomains.length - redirectDomains.length}`);
-  
+  console.log(`Redirecting: ${redirectCount}`);
+  console.log(`Active (no issues): ${domains.length - deadDomains.length - redirectCount}`);
+
   if (deadDomains.length > 0) {
     writeDeadDomains(deadDomains, SCAN_TIMESTAMP, INPUT_FILE);
     console.log(`\n${tags.tip} Remove these ${deadDomains.length} dead domains from your filter list`);
   } else {
     console.log(`\n${tags.ok} No dead domains found`);
   }
-  
+
   if (redirectDomains.length > 0) {
     writeRedirectDomains(redirectDomains, SCAN_TIMESTAMP, INPUT_FILE);
-    console.log(`\n${tags.tip} Review these ${redirectDomains.length} redirecting domains - they may need rule updates`);
+    console.log(`\n${tags.tip} Review these ${redirectCount} redirecting domains - they may need rule updates`);
+  } else if (redirectCount > 0) {
+    console.log(`\n${tags.ok} ${redirectCount} redirecting domains moved to dead list (see redirect file)`);
   } else {
     console.log(`${tags.ok} No redirecting domains found`);
   }
