@@ -868,10 +868,6 @@ async function checkDomain(browser, domainObj, index, total) {
       page = await browser.newPage();
       debugBrowser(`Created new page for ${variant}`);
 
-      // Set custom Chrome user agent
-      await page.setUserAgent(USER_AGENT);
-      debugBrowser(`Set user agent: ${USER_AGENT}`);
-
       // Block unnecessary resources if flag is enabled
       if (BLOCK_RESOURCES) {
         await page.setRequestInterception(true);
@@ -1344,7 +1340,8 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
       '--disable-sync',
       '--disable-translate',
       '--ignore-certificate-errors',
-      '--ignore-certificate-errors-spki-list'
+      '--ignore-certificate-errors-spki-list',
+      `--user-agent=${USER_AGENT}`
     ]
   });
 
