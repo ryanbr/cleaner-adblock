@@ -1031,8 +1031,7 @@ async function checkDomain(browser, domainObj, index, total) {
       const isNavTimeout = error.message.includes('Navigation timeout of');
       
       const isDead = !isCertError && !isNavTimeout && (
-      //const isDead = !isCertError && !(IGNORE_NAV_TIMEOUT && isNavTimeout) && (
-        error.message.includes('timeout') || 
+        error.message.includes('timeout') ||
         error.message.includes('ERR_NAME_NOT_RESOLVED') ||
         error.message.includes('ERR_CONNECTION_REFUSED') ||
         error.message.includes('ERR_CONNECTION_TIMED_OUT') ||
