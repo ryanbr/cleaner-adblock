@@ -1337,7 +1337,13 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
       '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',
       '--memory-pressure-off',
-      '--ignore-certificate-errors', // Additional certificate error ignoring
+      '--disable-gpu',
+      '--disable-extensions',
+      '--disable-background-networking',
+      '--disable-default-apps',
+      '--disable-sync',
+      '--disable-translate',
+      '--ignore-certificate-errors',
       '--ignore-certificate-errors-spki-list'
     ]
   });
