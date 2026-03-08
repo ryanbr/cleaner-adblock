@@ -30,7 +30,7 @@
     "node": ">=20.0.0"
   },
   "dependencies": {
-    "puppeteer": "^24.0.0"
+    "puppeteer": "^24.38.0"
   },
   "repository": {
     "type": "git",
@@ -45,6 +45,9 @@
   "homepage": "https://github.com/ryanbr/cleaner-adblock#readme",
   "files": [
     "cleaner-adblock.js",
+    "lib/colorize.js",
+    "lib/domain-utils.js",
+    "lib/export.js",
     "multi_label_suffixes.json",
     "README.md",
     "LICENSE"
