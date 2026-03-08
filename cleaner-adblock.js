@@ -1122,7 +1122,7 @@ async function processDomains(browser, domainObjects) {
     debugBrowser(`After batch ${batchNumber}: ${openPages} pages open`);
     
     if (openPages > 1) {
-      console.log(`  ${tags.cleanup} Found ${openPages - 1} lingering pages, closing...`);
+      debugVerbose(`Found ${openPages - 1} lingering pages, closing...`);
       for (const page of pages) {
         if (page.url() !== 'about:blank') {
           try {
