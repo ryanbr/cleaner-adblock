@@ -1440,8 +1440,9 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
       }
     }
 
-    // Move redirecting domains to dead list after ping checks (no need to ping, they responded with a redirect)
+    // Write redirect file first, then move redirecting domains to dead list
     if (redirectDomains.length > 0) {
+      writeRedirectDomains(redirectDomains, SCAN_TIMESTAMP, INPUT_FILE);
       console.log(`Ping: Moving ${redirectDomains.length} redirecting domain(s) to dead list`);
       for (const r of redirectDomains) {
         deadDomains.push({ domain: r.domain, reason: `Redirects to ${r.finalDomain}` });
