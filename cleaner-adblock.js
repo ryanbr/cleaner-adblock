@@ -1332,12 +1332,19 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
     );
     console.log(`\n${tags.dns} Running checks on ${domainsToCheck.length} dead domains...`);
     
-    const dnsChecks = await Promise.all(
-      domainsToCheck.map(async (item) => {
-        const dnsCheck = await checkDNSRecord(item.domain);
-        return { domain: item.domain, dnsInfo: dnsCheck };
-      })
-    );
+    const DNS_CONCURRENCY = 10;
+    const dnsChecks = [];
+    for (let i = 0; i < domainsToCheck.length; i += DNS_CONCURRENCY) {
+      const batch = domainsToCheck.slice(i, i + DNS_CONCURRENCY);
+      const batchResults = await Promise.all(
+        batch.map(async (item) => {
+          const dnsCheck = await checkDNSRecord(item.domain);
+          return { domain: item.domain, dnsInfo: dnsCheck };
+        })
+      );
+      dnsChecks.push(...batchResults);
+      console.log(`  DNS: ${Math.min(i + DNS_CONCURRENCY, domainsToCheck.length)}/${domainsToCheck.length} checked`);
+    }
     
     // Create a map for quick lookup
     const dnsMap = new Map(dnsChecks.map(check => [check.domain, check.dnsInfo]));
