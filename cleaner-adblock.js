@@ -769,6 +769,14 @@ async function checkDNSRecord(domain) {
 
 const BLOCKED_RESOURCE_TYPES = new Set(['image', 'stylesheet', 'font', 'media']);
 
+function extractDomainFromUrl(urlStr) {
+  try {
+    return new URL(urlStr).hostname.replace(/^www\./, '');
+  } catch {
+    return urlStr;
+  }
+}
+
 // Check if domain is dead or redirecting
 // domainObj format: { original: 'domain.com', variants: ['domain.com', 'www.domain.com'] }
 async function checkDomain(browser, domainObj, index, total) {
@@ -969,17 +977,8 @@ async function checkDomain(browser, domainObj, index, total) {
       const isDead = isTrulyDead || (is403 && isLastVariant);
       
       // Check if redirects to different domain
-      const extractDomain = (urlStr) => {
-        try {
-          const parsed = new URL(urlStr);
-          return parsed.hostname.replace(/^www\./, '');
-        } catch {
-          return urlStr;
-        }
-      };
-      
-      const originalDomain = extractDomain(url);
-      const finalDomain = extractDomain(finalUrl);
+      const originalDomain = extractDomainFromUrl(url);
+      const finalDomain = extractDomainFromUrl(finalUrl);
       const isRedirecting = originalDomain !== finalDomain && !isDead;
       
       // Check if redirect is to similar domain (subdomain of same base)
