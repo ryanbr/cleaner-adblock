@@ -1421,15 +1421,6 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
 
   // Ping verification for dead domains (if enabled)
   if (CHECK_PING) {
-    // Move redirecting domains to dead list (old domain is obsolete, no need to ping)
-    if (redirectDomains.length > 0) {
-      console.log(`\nPing: Moving ${redirectDomains.length} redirecting domain(s) to dead list`);
-      for (const r of redirectDomains) {
-        deadDomains.push({ domain: r.domain, reason: `Redirects to ${r.finalDomain}` });
-      }
-      redirectDomains.length = 0;
-    }
-
     if (deadDomains.length > 0) {
       console.log(`\nRunning ping checks on ${deadDomains.length} dead domains...`);
 
@@ -1459,6 +1450,15 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
         deadDomains.push(...filtered);
         console.log(`Ping: Removed ${beforeCount - deadDomains.length} domain(s) that responded to ping`);
       }
+    }
+
+    // Move redirecting domains to dead list after ping checks (no need to ping, they responded with a redirect)
+    if (redirectDomains.length > 0) {
+      console.log(`Ping: Moving ${redirectDomains.length} redirecting domain(s) to dead list`);
+      for (const r of redirectDomains) {
+        deadDomains.push({ domain: r.domain, reason: `Redirects to ${r.finalDomain}` });
+      }
+      redirectDomains.length = 0;
     }
   }
 
