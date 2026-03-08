@@ -65,6 +65,7 @@ let BLOCK_RESOURCES = true; // Default: block resources for faster scans
 let SIMPLE_DOMAINS = false; // New option: parse as simple domain list
 let CHECK_DIG = false; // Default: don't check DNS A records
 let CHECK_DIG_ALWAYS = false; // Default: don't filter dead domains by DNS
+let CHECK_PING = false; // Default: don't verify dead domains with ping
 let EXPORT_LIST = false; // Default: don't export cleaned list
 let LOCALHOST_LIST = false; // Parse hosts file format (0.0.0.0/127.0.0.1 domain)
 let REMOVE_REDIRECTS = false; // Default: don't force remove redirects
@@ -96,6 +97,8 @@ for (const arg of args) {
     CHECK_DIG = true;
   } else if (arg === '--check-dig-always') {
     CHECK_DIG_ALWAYS = true;
+  } else if (arg === '--check-ping') {
+    CHECK_PING = true;
   } else if (arg === '--export-list') {
     EXPORT_LIST = true;
   } else if (arg === '--remove-redirects') {
@@ -153,6 +156,7 @@ Options:
   --simple-domains      Parse as plain domain list (one per line)
   --check-dig           Verify dead domains with DNS lookup
   --check-dig-always    Only report domains with no DNS A records
+  --check-ping          Verify dead domains with ping (checks www. and bare)
   --export-list         Export cleaned filter list (removes dead domains)
   --remove-redirects    Always remove redirected domains (ignores DNS checks)
   --localhost           Parse hosts file format (0.0.0.0/127.0.0.1 domain)
@@ -550,6 +554,28 @@ function expandDomainsWithWww(domains) {
       variants: [domain, baseDomain, `www.${baseDomain}`]
     };
   });
+}
+
+// Check if domain responds to ping (tries both bare and www variants)
+const PING_TIMEOUT = 3;
+
+async function checkPing(domain) {
+  const variants = domain.startsWith('www.')
+    ? [domain, domain.replace(/^www\./, '')]
+    : [domain, `www.${domain}`];
+
+  for (const variant of variants) {
+    try {
+      await execAsync(`ping -c 1 -W ${PING_TIMEOUT} ${variant}`, {
+        timeout: (PING_TIMEOUT + 2) * 1000
+      });
+      debugVerbose(`Ping success: ${variant}`);
+      return { alive: true, variant };
+    } catch (e) {
+      debugVerbose(`Ping failed: ${variant}`);
+    }
+  }
+  return { alive: false, variant: null };
 }
 
 // Check DNS A record for domain using dig
@@ -1395,6 +1421,38 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
    }
     
     console.log(`${tags.dns} Checks completed\n`);
+  }
+
+  // Ping verification for dead domains (if enabled)
+  if (CHECK_PING && deadDomains.length > 0) {
+    console.log(`\nRunning ping checks on ${deadDomains.length} dead domains...`);
+
+    const PING_CONCURRENCY = 10;
+    const alive = new Set();
+    for (let i = 0; i < deadDomains.length; i += PING_CONCURRENCY) {
+      const batch = deadDomains.slice(i, i + PING_CONCURRENCY);
+      const batchResults = await Promise.all(
+        batch.map(async (item) => {
+          const result = await checkPing(item.domain);
+          return { domain: item.domain, ...result };
+        })
+      );
+      for (const r of batchResults) {
+        if (r.alive) {
+          alive.add(r.domain);
+          console.log(`  ${tags.ok} ${r.domain} responds to ping (${r.variant})`);
+        }
+      }
+      console.log(`  Ping: ${Math.min(i + PING_CONCURRENCY, deadDomains.length)}/${deadDomains.length} checked`);
+    }
+
+    if (alive.size > 0) {
+      const beforeCount = deadDomains.length;
+      const filtered = deadDomains.filter(item => !alive.has(item.domain));
+      deadDomains.length = 0;
+      deadDomains.push(...filtered);
+      console.log(`Ping: Removed ${beforeCount - deadDomains.length} domain(s) that responded to ping`);
+    }
   }
 
   console.log(`\n=== Summary ===`);
