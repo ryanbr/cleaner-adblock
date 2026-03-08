@@ -1244,6 +1244,9 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
   if (ADD_WWW) {
     console.log(`--add-www enabled: Will check both domain.com and www.domain.com for bare domains`);
   }
+  if (CHECK_PING) {
+    console.log(`--check-ping enabled: Will verify dead domains with ping before confirming`);
+  }
   if (REMOVE_REDIRECTS) {
     console.log(`--remove-redirects enabled: Redirected domains will always be removed`);
   }
