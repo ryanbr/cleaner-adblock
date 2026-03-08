@@ -1168,7 +1168,7 @@ function writeDeadDomains(deadDomains, scanTimestamp, inputFile) {
     fs.writeFileSync(DEAD_DOMAINS_FILE, lines.join('\n'), 'utf8');
     console.log(`\n${tags.saved} Dead domains written to ${DEAD_DOMAINS_FILE}`);
   } catch (error) {
-    console.error(`\n✗ Error writing to ${DEAD_DOMAINS_FILE}: ${error.message}`);
+    console.error(`\n${tags.error} Error writing to ${DEAD_DOMAINS_FILE}: ${error.message}`);
     process.exit(1);
   }
 }
@@ -1198,7 +1198,7 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
     fs.writeFileSync(REDIRECT_DOMAINS_FILE, lines.join('\n'), 'utf8');
     console.log(`${tags.saved} Redirect domains written to ${REDIRECT_DOMAINS_FILE}`);
   } catch (error) {
-    console.error(`\n[ERROR] Error writing to ${REDIRECT_DOMAINS_FILE}: ${error.message}`);
+    console.error(`\n${tags.error} Error writing to ${REDIRECT_DOMAINS_FILE}: ${error.message}`);
     process.exit(1);
   }
 }
@@ -1221,7 +1221,7 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
 
   // Check if input file is specified
   if (!INPUT_FILE) {
-    console.error('? Error: No input file specified');
+    console.error(`${tags.error} No input file specified`);
     console.log('Usage: node cleaner-adblock.js <file> [options]');
     console.log('Example: node cleaner-adblock.js my_rules.txt');
     console.log('Example: node cleaner-adblock.js domains.txt --simple-domains');
@@ -1261,7 +1261,7 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
   try {
     domains = parseDomainsFromFile(INPUT_FILE);
   } catch (error) {
-    console.error(`\n✗ Error: ${error.message}`);
+    console.error(`\n${tags.error} ${error.message}`);
     console.log(`\nPlease check that the file '${INPUT_FILE}' exists and is readable.\n`);
     process.exit(1);
   }
@@ -1321,7 +1321,7 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
 
   // validate browser launched successfully
   if (!browser || typeof browser.newPage !== 'function') {
-    console.error('\n✗ Error: failed to launch browser.');
+    console.error(`\n${tags.error} Failed to launch browser.`);
     process.exit(1);
   }
 
@@ -1492,7 +1492,7 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
   if (EXPORT_LIST && (deadDomains.length > 0 || redirectDomains.length > 0)) {
     const exportedFile = exportCleanedList(INPUT_FILE, deadDomains, redirectDomains, IGNORE_SIMILAR, REMOVE_REDIRECTS);
     if (exportedFile === null) {
-      console.error(`${tags.error || '[ERROR]'} Failed to export cleaned filter list`);
+      console.error(`${tags.error} Failed to export cleaned filter list`);
     }
   }
 
