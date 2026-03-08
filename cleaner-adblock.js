@@ -1224,9 +1224,11 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
   const SCAN_TIMESTAMP = new Date().toISOString();
   const FILENAME_TIMESTAMP = SCAN_TIMESTAMP.replace(/:/g, '-').replace(/\..+/, ''); // 2024-11-19T12-34-56
   
-  // Set filenames with timestamp
-  DEAD_DOMAINS_FILE = `dead_domains_${FILENAME_TIMESTAMP}.txt`;
-  REDIRECT_DOMAINS_FILE = `redirect_domains_${FILENAME_TIMESTAMP}.txt`;
+  // Set filenames with input file name and timestamp
+  const inputBasename = INPUT_FILE ? require('path').basename(INPUT_FILE, require('path').extname(INPUT_FILE)) : '';
+  const fileLabel = inputBasename ? `${inputBasename}_` : '';
+  DEAD_DOMAINS_FILE = `dead_domains_${fileLabel}${FILENAME_TIMESTAMP}.txt`;
+  REDIRECT_DOMAINS_FILE = `redirect_domains_${fileLabel}${FILENAME_TIMESTAMP}.txt`;
   
   console.log(`Output files will be:`);
   console.log(`  Dead domains: ${DEAD_DOMAINS_FILE}`);
