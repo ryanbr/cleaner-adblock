@@ -77,6 +77,7 @@ let DEBUG_BROWSER = false; // Log browser events
 let TEST_MODE = false; // Only test first N domains
 let TEST_COUNT = 5; // Number of domains to test in test mode
 let QUICK_DISCONNECT = false; // Disconnect as soon as result is determined
+let shuttingDown = false; // Graceful shutdown flag
 
 for (const arg of args) {
   if (arg.startsWith('--input=')) {
@@ -754,6 +755,9 @@ async function checkDomain(browser, domainObj, index, total) {
   
   // Try each variant until one succeeds
   for (let i = 0; i < variants.length; i++) {
+    if (shuttingDown) {
+      return { type: null, data: null };
+    }
     const variant = variants[i];
     const isLastVariant = i === variants.length - 1;
     const variantLabel = variant === original ? '' : ` (trying www.${original})`;
@@ -1307,7 +1311,26 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
   debugBrowser('Browser launched successfully');
 
   console.log('Browser launched. Starting domain checks...\n');
-  
+
+  const shutdown = async (signal) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`\n${tags.warn} Received ${signal}, shutting down...`);
+    try {
+      const pages = await browser.pages();
+      for (const page of pages) {
+        try { await page.close(); } catch (e) { /* ignore */ }
+      }
+      await browser.close();
+    } catch (e) {
+      try { browser.process()?.kill('SIGKILL'); } catch (e) { /* ignore */ }
+    }
+    process.exit(130);
+  };
+
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+
   const results = await processDomains(browser, domainObjects);
   
   // Ensure browser closes properly
