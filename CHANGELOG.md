@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.12
+
+- Add `--cosmetic-rules-only` flag to parse only cosmetic/element hiding rules
+- Fix `--input=` flag not working with multi-file support
+- Fix per-file color config not being picked up at startup
+
 ## 2.0.11
 
 - Add multi-file support for sequential processing (`node cleaner-adblock.js file1.txt file2.txt`)
