@@ -32,6 +32,7 @@ let CHECK_PING = false; // Default: don't verify dead domains with ping
 let EXPORT_LIST = false; // Default: don't export cleaned list
 let LOCALHOST_LIST = false; // Parse hosts file format (0.0.0.0/127.0.0.1 domain)
 let REMOVE_REDIRECTS = false; // Default: don't force remove redirects
+let COSMETIC_ONLY = false; // Default: parse all rule types
 
 // Debug options
 let DEBUG = false; // Enable debug output
@@ -96,6 +97,8 @@ for (const arg of args) {
     const parsed = parseInt(arg.split('=')[1], 10);
     CONCURRENCY = Math.max(1, Math.min(50, isNaN(parsed) ? 12 : parsed));
     cliFlags.add('concurrency');
+  } else if (arg === '--cosmetic-rules-only') {
+    COSMETIC_ONLY = true; cliFlags.add('cosmeticOnly');
   } else if (arg === '--quick-disconnect') {
     QUICK_DISCONNECT = true; cliFlags.add('quickDisconnect');
   } else if (arg.startsWith('--use-config=')) {
@@ -132,6 +135,7 @@ try {
     if (!cliFlags.has('removeRedirects') && config.removeRedirects != null) REMOVE_REDIRECTS = config.removeRedirects;
     if (!cliFlags.has('quickDisconnect') && config.quickDisconnect != null) QUICK_DISCONNECT = config.quickDisconnect;
     if (!cliFlags.has('localhost') && config.localhost != null) LOCALHOST_LIST = config.localhost;
+    if (!cliFlags.has('cosmeticOnly') && config.cosmeticOnly != null) COSMETIC_ONLY = config.cosmeticOnly;
 
     // Global ignored domains
     if (config.ignoredDomains && config.ignoredDomains.length > 0) {
@@ -162,7 +166,7 @@ try {
 const BASE_STATE = {
   CONCURRENCY, ADD_WWW, IGNORE_SIMILAR, BLOCK_RESOURCES, SIMPLE_DOMAINS,
   CHECK_DIG, CHECK_DIG_ALWAYS, CHECK_PING, EXPORT_LIST, REMOVE_REDIRECTS,
-  QUICK_DISCONNECT, LOCALHOST_LIST, IGNORED_DOMAINS: [...IGNORED_DOMAINS]
+  QUICK_DISCONNECT, LOCALHOST_LIST, COSMETIC_ONLY, IGNORED_DOMAINS: [...IGNORED_DOMAINS]
 };
 
 // Show help if requested (before loading heavy modules)
@@ -186,6 +190,7 @@ Options:
   --check-ping          Verify dead domains with ping (checks www. and bare)
   --export-list         Export cleaned filter list (removes dead domains)
   --remove-redirects    Always remove redirected domains (ignores DNS checks)
+  --cosmetic-rules-only Only parse cosmetic/element hiding rules (##, #@#, ##+js)
   --localhost           Parse hosts file format (0.0.0.0/127.0.0.1 domain)
   --color, --colour     Enable colored output
   --use-config=<file>   Use a custom config file instead of .cleanerconfig
@@ -402,6 +407,7 @@ function applyConfigForFile(filename) {
   REMOVE_REDIRECTS = BASE_STATE.REMOVE_REDIRECTS;
   QUICK_DISCONNECT = BASE_STATE.QUICK_DISCONNECT;
   LOCALHOST_LIST = BASE_STATE.LOCALHOST_LIST;
+  COSMETIC_ONLY = BASE_STATE.COSMETIC_ONLY;
   IGNORED_DOMAINS = [...BASE_STATE.IGNORED_DOMAINS];
 
   if (!_globalConfig || !_globalConfig.files) {
@@ -432,6 +438,7 @@ function applyConfigForFile(filename) {
   if (!cliFlags.has('removeRedirects') && fileConfig.removeRedirects != null) REMOVE_REDIRECTS = fileConfig.removeRedirects;
   if (!cliFlags.has('quickDisconnect') && fileConfig.quickDisconnect != null) QUICK_DISCONNECT = fileConfig.quickDisconnect;
   if (!cliFlags.has('localhost') && fileConfig.localhost != null) LOCALHOST_LIST = fileConfig.localhost;
+  if (!cliFlags.has('cosmeticOnly') && fileConfig.cosmeticOnly != null) COSMETIC_ONLY = fileConfig.cosmeticOnly;
 
   // Merge per-file ignored domains with global
   if (fileConfig.ignoredDomains && fileConfig.ignoredDomains.length > 0) {
@@ -490,8 +497,10 @@ function extractDomains(line) {
     }
   }
   
+  // Skip network rules if cosmetic-only mode
+  if (!COSMETIC_ONLY) {
   // Check for network rules with domain= parameter
-  // Examples: 
+  // Examples:
   // /path$script,domain=example.com
   // ||domain.com^$script,domain=site1.com|site2.com
   const domainMatch = line.match(domainParamPattern);
@@ -499,15 +508,15 @@ function extractDomains(line) {
     const domainList = domainMatch[1].split('|');
     for (let domain of domainList) {
       domain = domain.trim();
-      
+
       // Skip wildcards
       if (domain.includes('*') || domain.startsWith('~')) {
         continue;
       }
-      
+
       // Remove leading dots
       domain = domain.replace(/^[.]+/, '');
-      
+
       // Basic domain validation
       if (domain && domain.includes('.') && domain.length >= 4) {
         // Skip .onion domains and IP addresses
@@ -515,9 +524,9 @@ function extractDomains(line) {
           validDomains.push(domain);
         }
       }
-    }   
+    }
   }
-  
+
   // Extract domain from network rule format (||domain.com^ or ||domain.com/)
   if (line.includes('||')) {
     // Skip wildcard TLD patterns like ||domain.* or ||domain.*^
@@ -541,7 +550,8 @@ function extractDomains(line) {
   if (validDomains.length > 0) {
     return validDomains;
   }
-  
+  } // end !COSMETIC_ONLY
+
   // Extract domains from attribute selectors containing URLs
   // Matches: ##[href^="https://..."], ##[onclick^="...='https://..."], ##[data-url*="https://..."], etc.
   // Captures domain from any attribute with ^=, =, or *= containing an https:// or http:// URL
@@ -1389,6 +1399,9 @@ function writeRedirectDomains(redirectDomains, scanTimestamp, inputFile) {
     }
     if (REMOVE_REDIRECTS) {
       console.log(`--remove-redirects enabled: Redirected domains will always be removed`);
+    }
+    if (COSMETIC_ONLY) {
+      console.log(`--cosmetic-rules-only enabled: Only parsing cosmetic/element hiding rules`);
     }
     if (!BLOCK_RESOURCES) {
       console.log(`--disable-block-resources: Loading images/CSS/fonts/media (slower scans)`);
